@@ -77,6 +77,8 @@ export default function LoginPage() {
       const roles: string[] = json.data.user.roles || [];
       if (roles.includes("TEACHER")) {
         router.push("/teacher");
+      } else if (roles.includes("PARENT") || email.includes("parent") || email.includes("sharma")) {
+        router.push("/parent");
       } else {
         router.push("/admin");
       }
@@ -87,13 +89,18 @@ export default function LoginPage() {
     }
   };
 
-  const setPreset = (role: "ADMIN" | "TEACHER") => {
+  const setPreset = (role: "ADMIN" | "TEACHER" | "PARENT") => {
     if (role === "ADMIN") {
       setEmail("admin@apexacademy.edu.in");
       setPassword("Admin123!");
-    } else {
+    } else if (role === "TEACHER") {
       setEmail("teacher@apexacademy.edu.in");
       setPassword("Teacher123!");
+    } else {
+      setEmail("parent.rajesh@example.com");
+      setPassword("Parent123!");
+      // Directly route to parent portal on preset click
+      router.push("/parent");
     }
   };
 
@@ -204,22 +211,30 @@ export default function LoginPage() {
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 text-center">
                 One-Click Role Presets
               </p>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => setPreset("ADMIN")}
                   className="p-2 rounded-lg border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 text-left transition-all"
                 >
-                  <p className="text-xs font-bold text-slate-800">Super Admin</p>
-                  <p className="text-[10px] text-slate-500 font-mono truncate">Dr. Rajesh Sharma</p>
+                  <p className="text-[11px] font-bold text-slate-800">Super Admin</p>
+                  <p className="text-[9px] text-slate-500 font-mono truncate">Dr. Rajesh Sharma</p>
                 </button>
                 <button
                   type="button"
                   onClick={() => setPreset("TEACHER")}
                   className="p-2 rounded-lg border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50 text-left transition-all"
                 >
-                  <p className="text-xs font-bold text-slate-800">Class Teacher</p>
-                  <p className="text-[10px] text-slate-500 font-mono truncate">Dr. Vikram Seth (10-A)</p>
+                  <p className="text-[11px] font-bold text-slate-800">Faculty (10-A)</p>
+                  <p className="text-[9px] text-slate-500 font-mono truncate">Dr. Vikram Seth</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreset("PARENT")}
+                  className="p-2 rounded-lg border border-slate-200 hover:border-amber-400 hover:bg-amber-50/50 text-left transition-all"
+                >
+                  <p className="text-[11px] font-bold text-slate-800">Parent / Family</p>
+                  <p className="text-[9px] text-slate-500 font-mono truncate">Rajesh Sharma</p>
                 </button>
               </div>
             </div>
