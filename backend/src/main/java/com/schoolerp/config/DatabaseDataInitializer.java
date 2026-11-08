@@ -13,6 +13,8 @@ import com.schoolerp.modules.finance.entity.FeeInvoice;
 import com.schoolerp.modules.finance.entity.FinancialLedgerEntry;
 import com.schoolerp.modules.finance.repository.FeeInvoiceRepository;
 import com.schoolerp.modules.finance.repository.FinancialLedgerEntryRepository;
+import com.schoolerp.modules.communication.entity.*;
+import com.schoolerp.modules.communication.repository.*;
 import com.schoolerp.modules.identity.entity.Role;
 import com.schoolerp.modules.identity.entity.User;
 import com.schoolerp.modules.identity.repository.RoleRepository;
@@ -70,6 +72,8 @@ public class DatabaseDataInitializer implements CommandLineRunner {
     private final GpsPingRepository gpsPingRepository;
     private final BookRepository bookRepository;
     private final BookIssueRecordRepository bookIssueRecordRepository;
+    private final CircularRepository circularRepository;
+    private final NotificationDispatchLogRepository dispatchLogRepository;
 
     @Override
     public void run(String... args) {
@@ -600,6 +604,57 @@ public class DatabaseDataInitializer implements CommandLineRunner {
                         .fineAmount(BigDecimal.ZERO)
                         .build());
             }
+        }
+
+        // 13. Seed Communication (Circulars & Notification Dispatches)
+        if (circularRepository.count() == 0) {
+            circularRepository.save(Circular.builder()
+                    .tenantId(tenantId)
+                    .title("Annual Inter-School CBSE Science Olympiad 2026")
+                    .content("Students of Classes 9, 10, and 11 are invited to register for the national qualifiers by November 20. Preliminary rounds will be conducted in the Physics & Chemistry Senior Labs.")
+                    .targetAudience("ALL")
+                    .priority("IMPORTANT")
+                    .attachmentUrl("s3://apex-docs/circulars/olympiad-guidelines-2026.pdf")
+                    .publishedBy("Dr. Vikram Seth (Head of Science)")
+                    .publishedDate(LocalDate.now().minusDays(1))
+                    .status("PUBLISHED")
+                    .build());
+
+            circularRepository.save(Circular.builder()
+                    .tenantId(tenantId)
+                    .title("Term 1 Parent-Teacher Meeting (PTM) Schedule")
+                    .content("The mandatory Term 1 PTM for Class 10 Sections A & B will be held this Saturday between 09:00 AM and 01:00 PM. Teachers will review continuous assessment portfolios.")
+                    .targetAudience("PARENTS")
+                    .targetGradeLevel("Class 10")
+                    .priority("URGENT")
+                    .publishedBy("Principal Office")
+                    .publishedDate(LocalDate.now())
+                    .status("PUBLISHED")
+                    .build());
+
+            dispatchLogRepository.save(NotificationDispatchLog.builder()
+                    .tenantId(tenantId)
+                    .recipientName("Rajesh Sharma (Father of Aarav)")
+                    .recipientIdentifier("+91 98765 43210")
+                    .recipientType("PARENT")
+                    .channel("WHATSAPP_BUSINESS")
+                    .triggerEvent("CIRCULAR_ALERT")
+                    .messageBody("Apex Academy Alert: PTM Schedule for Class 10 has been published on parent portal. Date: Saturday 09:00 AM.")
+                    .providerMessageId("wamid.HBgLMTc4NDQ2")
+                    .deliveryStatus("DELIVERED")
+                    .build());
+
+            dispatchLogRepository.save(NotificationDispatchLog.builder()
+                    .tenantId(tenantId)
+                    .recipientName("Alok Verma (Father of Ishaan)")
+                    .recipientIdentifier("+91 98333 44556")
+                    .recipientType("PARENT")
+                    .channel("SMS_DLT")
+                    .triggerEvent("FEE_DUE_REMINDER")
+                    .messageBody("Reminder: Outstanding fee invoice INV-2026-0843 of INR 15,000.00 is due on Nov 15. Please pay online via parent portal.")
+                    .providerMessageId("sms_msg_994812")
+                    .deliveryStatus("DELIVERED")
+                    .build());
         }
 
         log.info("Multi-tenant enterprise seed sequence completed successfully.");

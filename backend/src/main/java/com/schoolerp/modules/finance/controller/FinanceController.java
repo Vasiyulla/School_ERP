@@ -3,6 +3,7 @@ package com.schoolerp.modules.finance.controller;
 import com.schoolerp.common.response.ApiResponse;
 import com.schoolerp.modules.finance.entity.FeeInvoice;
 import com.schoolerp.modules.finance.entity.FinancialLedgerEntry;
+import com.schoolerp.modules.finance.entity.PaymentWebhookEvent;
 import com.schoolerp.modules.finance.service.FinanceService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +34,33 @@ public class FinanceController {
         return ResponseEntity.ok(ApiResponse.ok(entries));
     }
 
+    @GetMapping("/webhooks")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('ACCOUNTANT')")
+    public ResponseEntity<ApiResponse<List<PaymentWebhookEvent>>> getWebhookEvents() {
+        return ResponseEntity.ok(ApiResponse.ok(financeService.getWebhookEvents()));
+    }
+
+    @PostMapping("/webhooks/{gateway}")
+    public ResponseEntity<ApiResponse<FinanceService.PaymentWebhookResult>> handleWebhook(
+            @PathVariable String gateway,
+            @RequestHeader(value = "X-Razorpay-Signature", required = false) String razorpaySig,
+            @RequestHeader(value = "Stripe-Signature", required = false) String stripeSig,
+            @RequestBody WebhookPayload payload) {
+
+        String signature = razorpaySig != null ? razorpaySig : (stripeSig != null ? stripeSig : "TEST_HMAC_SIG");
+        FinanceService.PaymentWebhookResult result = financeService.processWebhook(
+                gateway,
+                payload.getEventId(),
+                payload.getEventType(),
+                signature,
+                payload.getRawJson(),
+                payload.getInvoiceNumber(),
+                payload.getAmount()
+        );
+
+        return ResponseEntity.ok(ApiResponse.ok("Webhook processed", result));
+    }
+
     @PostMapping("/invoices/{invoiceId}/collect")
     @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('ACCOUNTANT')")
     public ResponseEntity<ApiResponse<FeeInvoice>> collectPayment(
@@ -46,6 +74,15 @@ public class FinanceController {
     public static class PaymentRequest {
         private BigDecimal amount;
         private String paymentMethod; // CASH, POS, CHEQUE, ONLINE
+    }
+
+    @Data
+    public static class WebhookPayload {
+        private String eventId;
+        private String eventType;
+        private String invoiceNumber;
+        private BigDecimal amount;
+        private String rawJson;
     }
 }
 

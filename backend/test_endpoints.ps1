@@ -149,6 +149,46 @@ foreach ($iss in $issuesRes.data) {
     Write-Host " - Issued: '$($iss.bookTitle)' to $($iss.studentName) | Due: $($iss.dueDate) | Status: $($iss.status)"
 }
 
+Write-Host "`n11. Testing Communication: Circulars & Multi-Channel Dispatches (GET /api/v1/communication)..."
+$circularsRes = Invoke-RestMethod -Uri "$baseUri/communication/circulars" -Method Get -Headers $authHeaders
+Write-Host "Retrieved $($circularsRes.data.Count) school circulars:"
+foreach ($c in $circularsRes.data) {
+    Write-Host " - Circular: '$($c.title)' | Audience: $($c.targetAudience) | Priority: $($c.priority) | By: $($c.publishedBy)"
+}
+$dispatchesRes = Invoke-RestMethod -Uri "$baseUri/communication/dispatches" -Method Get -Headers $authHeaders
+Write-Host "Retrieved $($dispatchesRes.data.Count) notification dispatch logs:"
+foreach ($d in $dispatchesRes.data) {
+    Write-Host " - Dispatch to $($d.recipientName) via $($d.channel) | Trigger: $($d.triggerEvent) | Status: $($d.deliveryStatus)"
+}
+
+Write-Host "`n12. Testing Enterprise Payment Gateway Webhooks & Idempotency (POST /api/v1/finance/webhooks/razorpay)..."
+$webhookEventId = "evt_rzp_live_" + (Get-Random -Minimum 100000 -Maximum 999999)
+$webhookPayload = @{
+    eventId = $webhookEventId
+    eventType = "payment.captured"
+    invoiceNumber = "INV-2026-0843"
+    amount = 15000.00
+    rawJson = '{"order_id":"order_88291","status":"captured"}'
+} | ConvertTo-Json
+
+$webhookHeaders = @{
+    "Content-Type" = "application/json"
+    "X-Tenant-ID" = $tenantId
+    "X-Razorpay-Signature" = "f56b2512f451e06d99a224"
+}
+
+# 12.1 First Webhook Delivery
+$whRes1 = Invoke-RestMethod -Uri "$baseUri/finance/webhooks/razorpay" -Method Post -Body $webhookPayload -Headers $webhookHeaders
+Write-Host "Webhook Delivery #1: Status: $($whRes1.data.status), Message: $($whRes1.data.message), IsDuplicate: $($whRes1.data.isDuplicate)"
+
+# 12.2 Replay Attack / Network Retry (Identical Event ID)
+$whRes2 = Invoke-RestMethod -Uri "$baseUri/finance/webhooks/razorpay" -Method Post -Body $webhookPayload -Headers $webhookHeaders
+Write-Host "Webhook Replay Delivery #2: Status: $($whRes2.data.status), Message: $($whRes2.data.message), IsDuplicate: $($whRes2.data.isDuplicate)"
+
+# 12.3 Inspect Webhook Audit Log
+$whLogsRes = Invoke-RestMethod -Uri "$baseUri/finance/webhooks" -Method Get -Headers $authHeaders
+Write-Host "Retrieved $($whLogsRes.data.Count) recorded webhook events in audit register."
+
 Write-Host "`n============================================================"
 Write-Host " ALL ENTERPRISE BACKEND ENDPOINTS VERIFIED & VALIDATED 100%"
 Write-Host "============================================================"

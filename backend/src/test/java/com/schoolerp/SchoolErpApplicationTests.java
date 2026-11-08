@@ -1,6 +1,8 @@
 package com.schoolerp;
 
 import com.schoolerp.common.context.TenantContext;
+import com.schoolerp.modules.communication.service.CommunicationService;
+import com.schoolerp.modules.finance.service.FinanceService;
 import com.schoolerp.modules.identity.dto.AuthResponse;
 import com.schoolerp.modules.identity.dto.LoginRequest;
 import com.schoolerp.modules.identity.service.AuthService;
@@ -11,6 +13,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+
+import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -25,6 +29,12 @@ class SchoolErpApplicationTests {
 
     @Autowired
     private OperationsService operationsService;
+
+    @Autowired
+    private CommunicationService communicationService;
+
+    @Autowired
+    private FinanceService financeService;
 
     @BeforeEach
     void setUp() {
@@ -99,5 +109,50 @@ class SchoolErpApplicationTests {
         var issues = operationsService.getIssueRecords();
         assertNotNull(issues);
         assertTrue(issues.size() >= 1, "Should have seeded at least 1 active book issue");
+    }
+
+    @Test
+    void testCommunicationModule() {
+        var circulars = communicationService.getCirculars();
+        assertNotNull(circulars);
+        assertTrue(circulars.size() >= 2, "Should have seeded at least 2 circulars");
+        assertTrue(circulars.stream().anyMatch(c -> c.getTitle().contains("Science Olympiad")));
+
+        var dispatches = communicationService.getDispatchLogs();
+        assertNotNull(dispatches);
+        assertTrue(dispatches.size() >= 2, "Should have seeded at least 2 dispatch logs");
+    }
+
+    @Test
+    void testIdempotentWebhookProcessing() {
+        String eventId = "evt_razorpay_test_0099";
+        var firstResult = financeService.processWebhook(
+                "RAZORPAY",
+                eventId,
+                "payment.captured",
+                "sig_valid_test_hash",
+                "{}",
+                "INV-2026-0843",
+                new BigDecimal("15000.00")
+        );
+
+        assertNotNull(firstResult);
+        assertEquals("SUCCESS", firstResult.getStatus());
+        assertFalse(firstResult.isDuplicate(), "First webhook processing should not be duplicate");
+
+        // Replay same webhook event to test idempotency and replay-attack defense
+        var replayResult = financeService.processWebhook(
+                "RAZORPAY",
+                eventId,
+                "payment.captured",
+                "sig_valid_test_hash",
+                "{}",
+                "INV-2026-0843",
+                new BigDecimal("15000.00")
+        );
+
+        assertNotNull(replayResult);
+        assertEquals("DUPLICATE_IGNORED", replayResult.getStatus());
+        assertTrue(replayResult.isDuplicate(), "Replay webhook should be marked duplicate and safely ignored");
     }
 }

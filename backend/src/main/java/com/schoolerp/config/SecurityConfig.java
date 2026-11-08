@@ -45,6 +45,7 @@ public class SecurityConfig {
                         // Public endpoints
                         .requestMatchers(
                                 "/api/v1/auth/**",
+                                "/api/v1/finance/webhooks/**",
                                 "/h2-console/**",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**"
@@ -52,6 +53,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         // Protected endpoints with role checking
                         .requestMatchers("/api/v1/system/**").hasRole("SUPER_ADMIN")
+                        .requestMatchers("/api/v1/communication/**").hasAnyRole("SUPER_ADMIN", "TEACHER", "PRINCIPAL")
                         .requestMatchers("/api/v1/finance/**").hasAnyRole("SUPER_ADMIN", "ACCOUNTANT")
                         .requestMatchers("/api/v1/attendance/**").hasAnyRole("SUPER_ADMIN", "TEACHER", "PRINCIPAL")
                         .requestMatchers("/api/v1/examinations/**").hasAnyRole("SUPER_ADMIN", "TEACHER", "PRINCIPAL")
