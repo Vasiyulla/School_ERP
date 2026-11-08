@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: school-erp-backend
+  profiles:
+    active: dev
+  threads:
+    virtual:
+      enabled: true # Java 21 Project Loom virtual threads for high-throughput concurrency
+
+server:
+  port: 8080
+  shutdown: graceful
+
+app:
+  jwt:
+    secret: schoolerp-super-secret-jwt-signing-key-for-saas-enterprise-2026-minimum-256-bits
+    expiration-ms: 86400000 # 24 hours
+

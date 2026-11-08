@@ -1,0 +1,67 @@
+# ==========================================
+# School ERP - Git Ignore Configuration
+# ==========================================
+
+# Agents & AI Operational Memory (Per User Directive)
+.agents/
+.agents
+
+# Node.js & Frontend Dependencies
+node_modules/
+/.pnp
+.pnp.js
+package-lock.json.bak
+
+# Next.js Build Outputs & Cache
+.next/
+/out/
+/build
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# Backend Java & Gradle Build Artifacts
+.gradle/
+backend/.gradle/
+backend/build/
+backend/bin/
+backend/out/
+backend/target/
+build/
+bin/
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+# Environment & Secret Variables
+.env
+.env*.local
+*.pem
+*.key
+credentials.json
+
+# Logs & Temporary Files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.tmp
+*.bak
+*.swp
+
+# OS System Files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# IDE & Editor Configurations
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+*.sublime-project
+*.sublime-workspace
