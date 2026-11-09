@@ -94,6 +94,21 @@ class SchoolErpApplicationTests {
     private com.schoolerp.modules.attendance.service.AttendanceComplianceService complianceService;
 
     @Autowired
+    private com.schoolerp.modules.system.service.TenantFeatureFlagService featureFlagService;
+
+    @Autowired
+    private com.schoolerp.modules.academics.service.AcademicYearRolloverService rolloverService;
+
+    @Autowired
+    private com.schoolerp.modules.examinations.service.ExamSeatingService seatingService;
+
+    @Autowired
+    private com.schoolerp.modules.operations.service.EmergencyIncidentService incidentService;
+
+    @Autowired
+    private com.schoolerp.modules.system.service.SystemBackupService backupService;
+
+    @Autowired
     private com.schoolerp.modules.finance.repository.FeeInvoiceRepository feeInvoiceRepository;
 
     @BeforeEach
@@ -682,4 +697,111 @@ class SchoolErpApplicationTests {
         var defaulters = complianceService.getDefaulters(null, 75.0);
         assertNotNull(defaulters);
     }
+
+    @Test
+    void testGranularFeatureFlagEntitlementEngine() {
+        var flags = featureFlagService.getAllFeatures();
+        assertNotNull(flags);
+        assertFalse(flags.isEmpty());
+
+        // Toggle a flag
+        var toggled = featureFlagService.toggleFeature("transport.live_gps_telemetry", false, "PREMIUM");
+        assertNotNull(toggled);
+        assertFalse(toggled.isEnabled());
+        assertFalse(featureFlagService.isFeatureEnabled("transport.live_gps_telemetry"));
+
+        // Re-enable
+        var reEnabled = featureFlagService.toggleFeature("transport.live_gps_telemetry", true, "PREMIUM");
+        assertTrue(reEnabled.isEnabled());
+        assertTrue(featureFlagService.isFeatureEnabled("transport.live_gps_telemetry"));
+    }
+
+    @Test
+    void testAcademicYearBatchPromotionRolloverEngine() {
+        var rollover = rolloverService.executeBatchRollover(
+                "2025-2026",
+                "2026-2027",
+                "Executive Principal"
+        );
+        assertNotNull(rollover);
+        assertEquals("2025-2026", rollover.getFromAcademicYear());
+        assertEquals("2026-2027", rollover.getToAcademicYear());
+        assertTrue(rollover.getTotalStudentsEvaluated() >= 0);
+
+        var history = rolloverService.getRolloverHistory();
+        assertNotNull(history);
+        assertFalse(history.isEmpty());
+    }
+
+    @Test
+    void testExamHallSeatingMatrixAndInvigilationDuty() {
+        var halls = seatingService.getHalls();
+        assertNotNull(halls);
+        assertFalse(halls.isEmpty());
+        var hall = halls.get(0);
+
+        var seatingPlan = seatingService.generateAntiCheatingSeatingPlan(
+                hall.getId(),
+                java.time.LocalDate.now().plusDays(2),
+                "MORNING",
+                "Mathematics & Physics"
+        );
+        assertNotNull(seatingPlan);
+        assertFalse(seatingPlan.isEmpty());
+
+        var teachers = employeeRepository.findAllByTenantId("tenant_apex_mumbai_01");
+        assertFalse(teachers.isEmpty());
+
+        var duty = seatingService.assignInvigilator(
+                hall.getId(),
+                java.time.LocalDate.now().plusDays(2),
+                "09:00 AM – 12:00 PM",
+                "Mathematics & Physics",
+                teachers.get(0).getId()
+        );
+        assertNotNull(duty);
+        assertEquals("ASSIGNED", duty.getStatus());
+    }
+
+    @Test
+    void testCampusEmergencySosLockdownLifecycle() {
+        var incident = incidentService.triggerEmergencySos(
+                "SECURITY_LOCKDOWN",
+                "CRITICAL",
+                "Perimeter North Gate",
+                "Unauthorized security breach detected near perimeter.",
+                "Chief Security Officer"
+        );
+        assertNotNull(incident);
+        assertEquals("ACTIVE_LOCKDOWN", incident.getStatus());
+        assertEquals("CRITICAL", incident.getSeverity());
+
+        var activeIncidents = incidentService.getActiveIncidents();
+        assertFalse(activeIncidents.isEmpty());
+
+        var resolved = incidentService.resolveIncident(
+                incident.getId(),
+                "Perimeter cleared and secured. All perimeter sensors recalibrated."
+        );
+        assertNotNull(resolved);
+        assertEquals("RESOLVED", resolved.getStatus());
+        assertNotNull(resolved.getResolvedAt());
+    }
+
+    @Test
+    void testPodBackupSnapshotAndHealthTelemetry() {
+        var backup = backupService.createPodBackup("FULL_POD_SNAPSHOT", "TEST_RUNNER");
+        assertNotNull(backup);
+        assertEquals("COMPLETED", backup.getStatus());
+        assertNotNull(backup.getSha256Checksum());
+        assertEquals(64, backup.getSha256Checksum().length(), "SHA-256 must be 64 hexadecimal characters");
+        assertTrue(backup.getFileSizeBytes() > 0);
+
+        var telemetry = backupService.getPodHealthTelemetry();
+        assertNotNull(telemetry);
+        assertEquals("UP", telemetry.getHealthStatus());
+        assertEquals("DEDICATED_DATABASE_POD", telemetry.getPodIsolationStatus());
+        assertTrue(telemetry.getHeapTotalMb() > 0);
+    }
 }
+

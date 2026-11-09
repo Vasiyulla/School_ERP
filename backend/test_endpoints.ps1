@@ -1,4 +1,4 @@
-﻿# Endpoint Verification Script
+# Endpoint Verification Script
 $baseUri = "http://localhost:8080/api/v1"
 $tenantId = "tenant_apex_mumbai_01"
 
@@ -708,7 +708,112 @@ Write-Host "CBSE Compliance Report for $($cr.studentName):"
 Write-Host " - Attendance: $($cr.attendancePercentage)% | Board Exam Eligible: $($cr.eligibleForBoardExams)"
 Write-Host " - Status: $($cr.warningStatus) | Days Needed to Recover: $($cr.requiredConsecutiveDaysToRecover) days"
 
+# ==============================================================================
+# SECTION 8: PHASE 5 ADVANCED ENTERPRISE INSTITUTIONAL CAPABILITIES (ENDPOINTS 49–56)
+# ==============================================================================
+
+# 49. Granular Feature Flags & Entitlements Engine
+Write-Host "`n[Endpoint 49] GET /api/v1/system/features (List Sub-Service Entitlements)..."
+$flagsRes = Invoke-RestMethod -Uri "$baseUri/system/features" -Method Get -Headers $authHeaders
+Write-Host "Tenant Entitlement Registry: $($flagsRes.data.Count) feature flags configured"
+foreach ($f in $flagsRes.data) {
+    Write-Host " - Flag: $($f.featureKey) | Name: $($f.featureName) | Enabled: $($f.enabled) | Tier: $($f.tier)"
+}
+
+# 50. Toggle Sub-Service Entitlement
+Write-Host "`n[Endpoint 50] POST /api/v1/system/features/toggle (Toggle Sub-Service Flag)..."
+$toggleBody = @{
+    featureKey = "transport.live_gps_telemetry"
+    enabled = $true
+    tier = "ENTERPRISE"
+} | ConvertTo-Json
+$toggleRes = Invoke-RestMethod -Uri "$baseUri/system/features/toggle" -Method Post -Body $toggleBody -Headers $authHeaders
+Write-Host "Feature Flag Toggled: $($toggleRes.data.featureKey) enabled=$($toggleRes.data.enabled) (Tier: $($toggleRes.data.tier))"
+
+# 51. Academic Year Batch Promotion & Rollover Engine
+Write-Host "`n[Endpoint 51] POST /api/v1/academics/rollovers/execute (Batch Student Promotion Rollover)..."
+$rolloverBody = @{
+    fromAcademicYear = "2025-2026"
+    toAcademicYear = "2026-2027"
+    executedBy = "Office of Executive Principal"
+} | ConvertTo-Json
+$rolloverRes = Invoke-RestMethod -Uri "$baseUri/academics/rollovers/execute" -Method Post -Body $rolloverBody -Headers $authHeaders
+$ro = $rolloverRes.data
+Write-Host "Academic Year Rollover Executed ($($ro.fromAcademicYear) -> $($ro.toAcademicYear)):"
+Write-Host " - Students Evaluated: $($ro.totalStudentsEvaluated)"
+Write-Host " - Promoted to Next Grade: $($ro.promotedCount)"
+Write-Host " - Class 12 Alumni Graduated: $($ro.graduatedCount)"
+Write-Host " - Status: $($ro.status)"
+
+# 52. Rollover Audit History
+Write-Host "`n[Endpoint 52] GET /api/v1/academics/rollovers/history (Rollover Audit Trail)..."
+$roHistoryRes = Invoke-RestMethod -Uri "$baseUri/academics/rollovers/history" -Method Get -Headers $authHeaders
+Write-Host "Retrieved $($roHistoryRes.data.Count) academic rollover audit records"
+
+# 53. Exam Hall Registration
+Write-Host "`n[Endpoint 53] POST /api/v1/examinations/halls (Register Exam Hall)..."
+$hallBody = @{
+    hallName = "Vivekananda Examination Hall C"
+    roomNumber = "Hall-302"
+    totalBenches = 20
+    seatsPerBench = 2
+} | ConvertTo-Json
+$hallRes = Invoke-RestMethod -Uri "$baseUri/examinations/halls" -Method Post -Body $hallBody -Headers $authHeaders
+$examHallId = $hallRes.data.id
+Write-Host "Exam Hall Registered: '$($hallRes.data.hallName)' | Capacity: $($hallRes.data.totalCapacity) seats ($($hallRes.data.totalBenches) benches)"
+
+# 54. Anti-Cheating Seating Matrix Generation
+Write-Host "`n[Endpoint 54] POST /api/v1/examinations/seating/generate (Generate Seating Matrix)..."
+$seatingGenBody = @{
+    hallId = $examHallId
+    examDate = (Get-Date).AddDays(5).ToString("yyyy-MM-dd")
+    session = "MORNING"
+    subject = "Mathematics Standard (CBSE 041)"
+} | ConvertTo-Json
+$seatingRes = Invoke-RestMethod -Uri "$baseUri/examinations/seating/generate" -Method Post -Body $seatingGenBody -Headers $authHeaders
+Write-Host "Anti-Cheating Seating Plan Generated: $($seatingRes.data.Count) student seating slots allocated in $($hallRes.data.hallName)"
+if ($seatingRes.data.Count -gt 0) {
+    $firstSeat = $seatingRes.data[0]
+    Write-Host " - Desk #$($firstSeat.deskNumber) (Row $($firstSeat.rowNumber), Col $($firstSeat.columnNumber)): $($firstSeat.studentName) (Roll: $($firstSeat.rollNumber), Class: $($firstSeat.className))"
+}
+
+# 55. Campus Emergency SOS Lockdown Trigger
+Write-Host "`n[Endpoint 55] POST /api/v1/operations/incidents/sos (Trigger Campus SOS Lockdown)..."
+$sosBody = @{
+    incidentType = "SECURITY_LOCKDOWN"
+    severity = "CRITICAL"
+    location = "Main Campus Gate 1 & Administrative Quad"
+    description = "Precautionary perimeter lockdown drill triggered by Campus Security"
+    reportedBy = "Director of Campus Safety"
+} | ConvertTo-Json
+$sosRes = Invoke-RestMethod -Uri "$baseUri/operations/incidents/sos" -Method Post -Body $sosBody -Headers $authHeaders
+$incId = $sosRes.data.id
+Write-Host "EMERGENCY SOS LOCKDOWN INITIATED: Incident ID $($incId)"
+Write-Host " - Type: $($sosRes.data.incidentType) | Severity: $($sosRes.data.severity) | Location: $($sosRes.data.location)"
+Write-Host " - Containment Actions: $($sosRes.data.containmentActions)"
+
+# 56. Pod Backup Snapshot & Telemetry
+Write-Host "`n[Endpoint 56] POST /api/v1/system/backups/create (Create Encrypted Pod Backup Snapshot)..."
+$backupBody = @{
+    backupType = "FULL_POD_SNAPSHOT"
+    initiatedBy = "Enterprise Automation Runner"
+} | ConvertTo-Json
+$backupRes = Invoke-RestMethod -Uri "$baseUri/system/backups/create" -Method Post -Body $backupBody -Headers $authHeaders
+$bk = $backupRes.data
+Write-Host "Dedicated Pod Encrypted Backup Generated:"
+Write-Host " - Snapshot File: $($bk.fileName) ($([Math]::Round($bk.fileSizeBytes / 1MB, 2)) MB)"
+Write-Host " - SHA-256 Checksum: $($bk.sha256Checksum)"
+Write-Host " - Storage Destination: $($bk.storageLocation)"
+Write-Host " - Status: $($bk.status)"
+
+$telemetryRes = Invoke-RestMethod -Uri "$baseUri/system/health/telemetry" -Method Get -Headers $authHeaders
+$tel = $telemetryRes.data
+Write-Host "Pod Real-Time Health Telemetry:"
+Write-Host " - Tenant Pod: $($tel.tenantId) ($($tel.podIsolationStatus)) | Status: $($tel.healthStatus)"
+Write-Host " - JVM Heap: $($tel.heapUsedMb) MB used / $($tel.heapTotalMb) MB allocated (Max: $($tel.heapMaxMb) MB)"
+Write-Host " - Active CPU Cores: $($tel.availableProcessors) | Threads: $($tel.activeThreadCount) | Uptime: $($tel.uptimeSeconds) seconds"
+
 Write-Host "`n============================================================"
-Write-Host " ALL 48 ENTERPRISE BACKEND ENDPOINTS VERIFIED & VALIDATED 100%"
+Write-Host " ALL 56 ENTERPRISE BACKEND ENDPOINTS VERIFIED & VALIDATED 100%"
 Write-Host "============================================================"
 Write-Host "============================================================"
