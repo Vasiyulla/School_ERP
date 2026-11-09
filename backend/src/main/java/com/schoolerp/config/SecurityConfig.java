@@ -48,6 +48,7 @@ public class SecurityConfig {
                                 "/api/v1/finance/webhooks/**",
                                 "/api/v1/examinations/gradebook/report-card/verify/**",
                                 "/api/v1/students/transfer-certificates/verify/**",
+                                "/api/v1/students/certificates/verify/**",
                                 "/api/v1/staff/payroll/biometric/punch",
                                 "/api/v1/operations/telemetry/**",
                                 "/api/v1/operations/gate-passes/verify-scan",

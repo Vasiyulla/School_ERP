@@ -111,6 +111,24 @@ class SchoolErpApplicationTests {
     @Autowired
     private com.schoolerp.modules.finance.repository.FeeInvoiceRepository feeInvoiceRepository;
 
+    @Autowired
+    private com.schoolerp.modules.students.service.IndianComplianceService indianComplianceService;
+
+    @Autowired
+    private com.schoolerp.modules.admissions.service.RteQuotaService rteQuotaService;
+
+    @Autowired
+    private com.schoolerp.modules.examinations.service.CbseLocService cbseLocService;
+
+    @Autowired
+    private com.schoolerp.modules.finance.service.IndianBankingService indianBankingService;
+
+    @Autowired
+    private com.schoolerp.modules.staff.service.IndianPayrollComplianceService indianPayrollComplianceService;
+
+    @Autowired
+    private com.schoolerp.modules.academics.service.MorningAssemblyService morningAssemblyService;
+
     @BeforeEach
     void setUp() {
         TenantContext.setTenantId("tenant_apex_mumbai_01");
@@ -803,5 +821,105 @@ class SchoolErpApplicationTests {
         assertEquals("DEDICATED_DATABASE_POD", telemetry.getPodIsolationStatus());
         assertTrue(telemetry.getHeapTotalMb() > 0);
     }
+
+    @Test
+    void testUdisePlusAndStudentCertificatesDesk() {
+        var udiseExport = indianComplianceService.exportUdiseData();
+        assertNotNull(udiseExport);
+        assertEquals("2026-2027", udiseExport.getAcademicYear());
+        assertTrue(udiseExport.getTotalEnrolledStudents() > 0);
+        assertTrue(udiseExport.getApaarRegisteredStudents() > 0);
+
+        var student = studentRepository.findAllByTenantId("tenant_apex_mumbai_01").get(0);
+        var cert = indianComplianceService.generateCertificate(
+                student.getId(),
+                "BONAFIDE",
+                "Regional Passport Office Verification",
+                "Principal Office"
+        );
+        assertNotNull(cert);
+        assertEquals("BONAFIDE", cert.getCertificateType());
+        assertNotNull(cert.getQrVerificationToken());
+
+        var verify = indianComplianceService.verifyCertificate(cert.getQrVerificationToken());
+        assertNotNull(verify);
+        assertTrue(verify.isValid());
+        assertEquals("AUTHENTIC_DIGITALLY_VERIFIED", verify.getVerificationStatus());
+    }
+
+    @Test
+    void testRteAct25PercentQuotaAndGovernmentReimbursementClaims() {
+        var records = rteQuotaService.getRteRecords();
+        assertNotNull(records);
+        assertFalse(records.isEmpty());
+
+        var claim = rteQuotaService.generateAnnualReimbursementClaim("2026-2027");
+        assertNotNull(claim);
+        assertEquals("2026-2027", claim.getAcademicYear());
+        assertTrue(claim.getTotalRteEnrolledStudents() > 0);
+        assertTrue(claim.getTotalReimbursementClaimAmount().compareTo(java.math.BigDecimal.ZERO) > 0);
+    }
+
+    @Test
+    void testCbseListCandidatesLocExaminationRegistration() {
+        var locExport = cbseLocService.generateLocExport("Class 10");
+        assertNotNull(locExport);
+        assertEquals("Central Board of Secondary Education (CBSE)", locExport.getBoardName());
+        assertTrue(locExport.getTotalRegisteredCandidates() >= 2);
+        assertTrue(locExport.getStandardMathCandidateCount() > 0);
+        assertTrue(locExport.getBasicMathCandidateCount() > 0);
+        assertTrue(locExport.getTotalRegistrationFeePayable().compareTo(java.math.BigDecimal.ZERO) > 0);
+    }
+
+    @Test
+    void testNpciDynamicUpiQrAndCashierDenominationDayEndScroll() {
+        var invoices = feeInvoiceRepository.findAllByTenantId("tenant_apex_mumbai_01");
+        assertFalse(invoices.isEmpty());
+
+        var upiPayload = indianBankingService.generateUpiDynamicQr(invoices.get(0).getId());
+        assertNotNull(upiPayload);
+        assertTrue(upiPayload.getUpiIntentUri().startsWith("upi://pay?pa=apexacademy.fees@sbi"));
+        assertEquals("8211", upiPayload.getMerchantCategoryCode());
+        assertNotNull(upiPayload.getQrBase64Payload());
+
+        var scroll = indianBankingService.closeCashierDayScroll(
+                "Senior Cashier",
+                java.time.LocalDate.now(),
+                50, 40, 100, 50, 20, 10,
+                new BigDecimal("46000.00"),
+                "Cash counter day-end balance complete"
+        );
+        assertNotNull(scroll);
+        assertEquals(new BigDecimal("46000"), scroll.getTotalCashCalculated());
+        assertEquals("BALANCED", scroll.getStatus());
+    }
+
+    @Test
+    void testEpfoEcrAndEsicStatutoryPayrollExports() {
+        var ecr = indianPayrollComplianceService.generateEpfoEcrExport("2026-11");
+        assertNotNull(ecr);
+        assertEquals("MH/BAN/0048291/000", ecr.getEstablishmentId());
+        assertTrue(ecr.getTotalMembers() > 0);
+        assertTrue(ecr.getTotalEeShare().compareTo(java.math.BigDecimal.ZERO) > 0);
+        assertTrue(ecr.getTotalEpsShare().compareTo(java.math.BigDecimal.ZERO) > 0);
+
+        var esic = indianPayrollComplianceService.generateEsicReturnExport("2026-11");
+        assertNotNull(esic);
+        assertTrue(esic.getTotalInsuredPersons() > 0);
+        assertTrue(esic.getTotalContributionPayable().compareTo(java.math.BigDecimal.ZERO) > 0);
+    }
+
+    @Test
+    void testMorningAssemblyHouseDutyAndQuadrangleRoster() {
+        var roster = morningAssemblyService.getActiveWeekRoster();
+        assertNotNull(roster);
+        assertEquals("Tagore House (Blue)", roster.getHouseOnDuty());
+        assertNotNull(roster.getThoughtForTheDay());
+        assertNotNull(roster.getTeacherInChargeName());
+
+        var allRosters = morningAssemblyService.getAllRosters();
+        assertFalse(allRosters.isEmpty());
+    }
 }
+
 

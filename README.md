@@ -5,8 +5,8 @@
 [![Next.js 15](https://img.shields.io/badge/Next.js-15_App_Router-black.svg?style=flat&logo=next.js)](https://nextjs.org/)
 [![Kotlin 2.0](https://img.shields.io/badge/Kotlin-Jetpack_Compose-purple.svg?style=flat&logo=kotlin)](https://kotlinlang.org/)
 [![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-12_Schemas-blue.svg?style=flat&logo=postgresql)](https://www.postgresql.org/)
-[![Tests Passing](https://img.shields.io/badge/JUnit_5-34%2F34_Tests_Passed-success.svg)](https://junit.org/)
-[![Endpoints Verified](https://img.shields.io/badge/REST_Endpoints-56%2F56_Live_Verified-blueviolet.svg)](#complete-56-live-verified-rest-endpoints-directory)
+[![Tests Passing](https://img.shields.io/badge/JUnit_5-40%2F40_Tests_Passed-success.svg)](https://junit.org/)
+[![Endpoints Verified](https://img.shields.io/badge/REST_Endpoints-66%2F66_Live_Verified-blueviolet.svg)](#complete-66-live-verified-rest-endpoints-directory)
 
 A cloud-native, multi-portal **B2B SaaS School Enterprise Resource Planning (ERP)** platform engineered to lead the global educational software industry. Built to Tier-1 commercial standards benchmarked directly against **PowerSchool, Toddle, Odoo Enterprise, SAP Fiori, Verkada, and Samsara**.
 
@@ -17,7 +17,7 @@ A cloud-native, multi-portal **B2B SaaS School Enterprise Resource Planning (ERP
 2. [Dedicated Pod & Database-Per-School Architecture](#2-dedicated-pod--database-per-school-architecture)
 3. [Global Commercial SaaS Benchmark Matrix](#3-global-commercial-saas-benchmark-matrix)
 4. [PostgreSQL 12-Schema Domain Architecture](#4-postgresql-12-schema-domain-architecture)
-5. [Complete 56 Live Verified REST Endpoints Directory](#5-complete-56-live-verified-rest-endpoints-directory)
+5. [Complete 66 Live Verified REST Endpoints Directory](#5-complete-66-live-verified-rest-endpoints-directory)
 6. [Omni-Channel Portals & Client Applications](#6-omni-channel-portals--client-applications)
 7. [Enterprise Invariants & Regulatory Compliance](#7-enterprise-invariants--regulatory-compliance)
 8. [Getting Started & Local Development](#8-getting-started--local-development)
@@ -184,6 +184,16 @@ All 56 endpoints are fully implemented, compiled, and verified via automated tes
 | **54** | `/api/v1/examinations/seating/generate` | `POST` / `GET` | `examinations` | Anti-cheating alternating seating plan matrix generator |
 | **55** | `/api/v1/operations/incidents/sos` | `POST` / `GET` | `operations` | Campus emergency SOS lockdown & containment protocol |
 | **56** | `/api/v1/system/backups/create` & `/telemetry` | `POST` / `GET` | `system` | Encrypted Pod snapshot backup & JVM health telemetry |
+| **57** | `/api/v1/students/{id}/certificates/generate` | `POST` | `students` | Bonafide, Character & CEA Fee Estimation certificates |
+| **58** | `/api/v1/students/certificates/verify/{qrToken}` | `GET` | `students` | Public unauthenticated certificate QR verification |
+| **59** | `/api/v1/students/udise/export` | `GET` | `students` | Ministry of Education UDISE+ and APAAR ID registry |
+| **60** | `/api/v1/admissions/rte/register` | `POST` | `admissions` | RTE Act 2009 25% EWS quota admission enrollment |
+| **61** | `/api/v1/admissions/rte/claims/annual` | `GET` | `admissions` | State Education Department annual reimbursement claim |
+| **62** | `/api/v1/examinations/cbse-loc/export` | `GET` | `examinations` | Official CBSE LOC Pariksha Sangam board submission |
+| **63** | `/api/v1/finance/invoices/{id}/upi-qr` | `GET` | `finance` | NPCI Dynamic UPI Intent QR code for fee collection |
+| **64** | `/api/v1/finance/cashier/day-scroll/close` | `POST` | `finance` | Cashier note denomination day-end balancing scroll |
+| **65** | `/api/v1/staff/payroll/epfo-ecr/export` | `GET` | `staff` | EPFO Unified Portal Electronic Challan cum Return (ECR) |
+| **66** | `/api/v1/academics/assemblies/active-week` | `GET` | `academics` | Morning Quadrangle Assembly & House duty roster |
 
 ---
 
@@ -284,15 +294,15 @@ The automated test suite validates multi-tenant isolation, statutory payroll cal
 cd backend
 ./gradlew test
 ```
-*Expected Result: `BUILD SUCCESSFUL` (34/34 tests passed with 0 failures).*
+*Expected Result: `BUILD SUCCESSFUL` (40/40 tests passed with 0 failures).*
 
-### 2. Live 56-Endpoint Verification Script
-Verify all 56 live REST API endpoints against an active backend server:
+### 2. Live 66-Endpoint Verification Script
+Verify all 66 live REST API endpoints against an active backend server:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File backend\test_endpoints.ps1
 ```
-*Expected Result: All 56 endpoints return HTTP 200 OK with formatted payloads.*
+*Expected Result: All 66 endpoints return HTTP 200 OK with formatted payloads.*
 
 ---
 

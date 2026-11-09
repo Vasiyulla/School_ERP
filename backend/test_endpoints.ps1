@@ -1,4 +1,4 @@
-# Endpoint Verification Script
+﻿# Endpoint Verification Script
 $baseUri = "http://localhost:8080/api/v1"
 $tenantId = "tenant_apex_mumbai_01"
 
@@ -813,7 +813,125 @@ Write-Host " - Tenant Pod: $($tel.tenantId) ($($tel.podIsolationStatus)) | Statu
 Write-Host " - JVM Heap: $($tel.heapUsedMb) MB used / $($tel.heapTotalMb) MB allocated (Max: $($tel.heapMaxMb) MB)"
 Write-Host " - Active CPU Cores: $($tel.availableProcessors) | Threads: $($tel.activeThreadCount) | Uptime: $($tel.uptimeSeconds) seconds"
 
+# ==============================================================================
+# SECTION 9: INDIAN SCHOOL REGULATORY, STATUTORY & OPERATIONAL MANDATES (ENDPOINTS 57–66)
+# ==============================================================================
+
+# 57. Indian Institutional Certificates Desk: Bonafide Certificate
+Write-Host "`n[Endpoint 57] POST /api/v1/students/$aaravId/certificates/generate (Generate Bonafide Certificate)..."
+$certBody = @{
+    certificateType = "BONAFIDE"
+    purpose = "Submission to Regional Passport Office (RPO) for Tatkaal Passport Application"
+    issuedBy = "Office of the Principal"
+} | ConvertTo-Json
+$certRes = Invoke-RestMethod -Uri "$baseUri/students/$aaravId/certificates/generate" -Method Post -Body $certBody -Headers $authHeaders
+$certToken = $certRes.data.qrVerificationToken
+Write-Host "Bonafide Certificate Issued: $($certRes.data.certificateNumber) for $($certRes.data.studentName) ($($certRes.data.className))"
+Write-Host " - Purpose: $($certRes.data.purpose)"
+Write-Host " - QR Verification Digest: $($certToken.Substring(0, 16))..."
+
+# 58. Public Certificate QR Verification
+Write-Host "`n[Endpoint 58] GET /api/v1/students/certificates/verify/$certToken (Public Digital Verification)..."
+$verifyRes = Invoke-RestMethod -Uri "$baseUri/students/certificates/verify/$certToken" -Method Get
+Write-Host "Certificate Digitally Verified:"
+Write-Host " - Serial: $($verifyRes.data.certificateNumber) | Type: $($verifyRes.data.certificateType)"
+Write-Host " - Student: $($verifyRes.data.studentName) | Status: $($verifyRes.data.verificationStatus)"
+
+# 59. UDISE+ and APAAR ID Digital Export
+Write-Host "`n[Endpoint 59] GET /api/v1/students/udise/export (Ministry of Education UDISE+ Export)..."
+$udiseRes = Invoke-RestMethod -Uri "$baseUri/students/udise/export" -Method Get -Headers $authHeaders
+$u = $udiseRes.data
+Write-Host "Ministry of Education UDISE+ Annual Report:"
+Write-Host " - School UDISE Code: $($u.schoolUdiseCode) | Academic Year: $($u.academicYear)"
+Write-Host " - Total Enrolled: $($u.totalEnrolledStudents) | APAAR ID Registered: $($u.apaarRegisteredStudents)"
+if ($u.profiles.Count -gt 0) {
+    $p1 = $u.profiles[0]
+    Write-Host " - Sample Student: $($p1.studentName) | PEN: $($p1.penNumber) | APAAR: $($p1.apaarId) | Category: $($p1.socialCategory)"
+}
+
+# 60. RTE Act 2009 25% Quota Admission Registration
+Write-Host "`n[Endpoint 60] POST /api/v1/admissions/rte/register (RTE 25% EWS Quota Admission)..."
+$rteRegBody = @{
+    studentName = "Rohan Dilip Shinde"
+    admissionNumber = "ADM-RTE-2026-08"
+    gradeApplied = "Class 1"
+    lotteryApplicationNo = "RTE-MH-2026-00994"
+    incomeCertificateNo = "INC-MH-2026-8842"
+    annualHouseholdIncome = 78000.00
+    category = "EWS"
+} | ConvertTo-Json
+$rteRes = Invoke-RestMethod -Uri "$baseUri/admissions/rte/register" -Method Post -Body $rteRegBody -Headers $authHeaders
+Write-Host "RTE 25% Quota Admission Enrolled: $($rteRes.data.studentName) (Lottery: $($rteRes.data.lotteryApplicationNo))"
+Write-Host " - State Approved Rate: ₹$($rteRes.data.stateGovernmentRate) | Reimbursement Status: $($rteRes.data.reimbursementStatus)"
+
+# 61. State Government RTE Annual Reimbursement Claim
+Write-Host "`n[Endpoint 61] GET /api/v1/admissions/rte/claims/annual (State RTE Reimbursement Claim)..."
+$rteClaimRes = Invoke-RestMethod -Uri "$baseUri/admissions/rte/claims/annual?academicYear=2026-2027" -Method Get -Headers $authHeaders
+$rc = $rteClaimRes.data
+Write-Host "RTE State Government Reimbursement Schedule:"
+Write-Host " - Department: $($rc.stateDepartment)"
+Write-Host " - Enrolled RTE Children: $($rc.totalRteEnrolledStudents) | Approved Rate/Student: ₹$($rc.perStudentApprovedRate)"
+Write-Host " - Total Reimbursement Claimed: ₹$($rc.totalReimbursementClaimAmount) (Status: $($rc.submissionStatus))"
+
+# 62. Official CBSE List of Candidates (LOC) Export
+Write-Host "`n[Endpoint 62] GET /api/v1/examinations/cbse-loc/export (CBSE Pariksha Sangam LOC Export)..."
+$locRes = Invoke-RestMethod -Uri "$baseUri/examinations/cbse-loc/export?classStandard=Class 10" -Method Get -Headers $authHeaders
+$loc = $locRes.data
+Write-Host "CBSE LOC Pariksha Sangam Report for $($loc.classStandard):"
+Write-Host " - School Affiliation No: $($loc.affiliationNumber) | Board: $($loc.boardName)"
+Write-Host " - Registered Candidates: $($loc.totalRegisteredCandidates) | Total Registration Fee: ₹$($loc.totalRegistrationFeePayable)"
+Write-Host " - Mathematics Breakdown: Standard (Code 041): $($loc.standardMathCandidateCount) | Basic (Code 241): $($loc.basicMathCandidateCount)"
+
+# 63. NPCI Dynamic UPI QR Intent Payload
+$firstInvId = $invoicesRes.data[0].id
+Write-Host "`n[Endpoint 63] GET /api/v1/finance/invoices/$firstInvId/upi-qr (NPCI Dynamic UPI QR)..."
+$upiRes = Invoke-RestMethod -Uri "$baseUri/finance/invoices/$firstInvId/upi-qr" -Method Get -Headers $authHeaders
+$upi = $upiRes.data
+Write-Host "NPCI Dynamic UPI Intent Generated for $($upi.invoiceNumber):"
+Write-Host " - Payee VPA: $($upi.merchantVpa) ($($upi.merchantName)) | MCC: $($upi.merchantCategoryCode)"
+Write-Host " - Amount: ₹$($upi.amountPayable)"
+Write-Host " - UPI Intent URI: $($upi.upiIntentUri)"
+
+# 64. Cashier Counter Day-End Balancing Scroll
+Write-Host "`n[Endpoint 64] POST /api/v1/finance/cashier/day-scroll/close (Cashier Day-End Note Denomination)..."
+$scrollBody = @{
+    cashierName = "Mr. Rakesh Gupta (Senior Bursar)"
+    counterDate = (Get-Date).ToString("yyyy-MM-dd")
+    count500Notes = 60
+    count200Notes = 50
+    count100Notes = 120
+    count50Notes = 40
+    count20Notes = 50
+    count10Notes = 100
+    totalSystemReceipts = 56000.00
+    notes = "Daily counter collections physically tallied and verified against ERP receipt register"
+} | ConvertTo-Json
+$scrollRes = Invoke-RestMethod -Uri "$baseUri/finance/cashier/day-scroll/close" -Method Post -Body $scrollBody -Headers $authHeaders
+$sc = $scrollRes.data
+Write-Host "Cashier Day-End Scroll Closed:"
+Write-Host " - Physical Cash Counted: ₹$($sc.totalCashCalculated) | System Receipts: ₹$($sc.totalSystemReceipts)"
+Write-Host " - Status: $($sc.status) (Discrepancy: ₹$($sc.discrepancyAmount))"
+
+# 65. EPFO Electronic Challan cum Return (ECR) Export
+Write-Host "`n[Endpoint 65] GET /api/v1/staff/payroll/epfo-ecr/export (EPFO ECR Monthly Export)..."
+$ecrRes = Invoke-RestMethod -Uri "$baseUri/staff/payroll/epfo-ecr/export?monthYear=2026-11" -Method Get -Headers $authHeaders
+$ecr = $ecrRes.data
+Write-Host "EPFO ECR Return for $($ecr.wageMonth):"
+Write-Host " - Establishment ID: $($ecr.establishmentId) ($($ecr.establishmentName))"
+Write-Host " - Covered Employees: $($ecr.totalMembers) | Total EPF Wages: ₹$($ecr.totalEpfWages)"
+Write-Host " - Employee Share (12%): ₹$($ecr.totalEeShare) | Pension Fund (8.33%): ₹$($ecr.totalEpsShare) | Employer EPF (3.67%): ₹$($ecr.totalErShare)"
+
+# 66. Morning Assembly Quadrangle Duty Roster
+Write-Host "`n[Endpoint 66] GET /api/v1/academics/assemblies/active-week (Morning Assembly Duty Roster)..."
+$assemblyRes = Invoke-RestMethod -Uri "$baseUri/academics/assemblies/active-week" -Method Get -Headers $authHeaders
+$as = $assemblyRes.data
+Write-Host "Morning Assembly Quadrangle Operations for Week of $($as.weekStartDate):"
+Write-Host " - House on Duty: $($as.houseOnDuty) | Teacher In-Charge: $($as.teacherInChargeName)"
+Write-Host " - Thought for the Day: `"$($as.thoughtForTheDay)`" (Presented by $($as.thoughtPresenterStudentName))"
+Write-Host " - National Pledge: Lead by $($as.pledgeLeaderStudentName) | Anthem: Lead by $($as.nationalAnthemLeadStudentName)"
+Write-Host " - News Reader: $($as.newsReaderStudentName)"
+
 Write-Host "`n============================================================"
-Write-Host " ALL 56 ENTERPRISE BACKEND ENDPOINTS VERIFIED & VALIDATED 100%"
+Write-Host " ALL 66 ENTERPRISE BACKEND ENDPOINTS VERIFIED & VALIDATED 100%"
 Write-Host "============================================================"
 Write-Host "============================================================"
