@@ -11,6 +11,7 @@ import java.util.UUID;
 @Repository
 public interface AttendanceRecordRepository extends JpaRepository<AttendanceRecord, UUID> {
     List<AttendanceRecord> findAllByTenantIdAndSessionId(String tenantId, UUID sessionId);
+    List<AttendanceRecord> findByTenantIdAndStudentId(String tenantId, UUID studentId);
     Optional<AttendanceRecord> findByIdAndTenantId(UUID id, String tenantId);
 }
 

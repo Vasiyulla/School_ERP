@@ -34,6 +34,10 @@ public class AuditLogService {
         recordEvent(actor, role, action, resourceType, resourceId, details, "127.0.0.1", "SUCCESS");
     }
 
+    public void logAction(String actor, String action, String resourceType, String resourceId, String details) {
+        recordEvent(actor, "USER", action, resourceType, resourceId, details, "127.0.0.1", "SUCCESS");
+    }
+
     @Async
     @Transactional
     public void recordEvent(String actorName, String actorRole, String action,

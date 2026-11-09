@@ -81,6 +81,21 @@ class SchoolErpApplicationTests {
     @Autowired
     private com.schoolerp.modules.communication.service.PtmService ptmService;
 
+    @Autowired
+    private com.schoolerp.modules.operations.service.LibraryService libraryService;
+
+    @Autowired
+    private com.schoolerp.modules.staff.service.StaffLeaveService staffLeaveService;
+
+    @Autowired
+    private com.schoolerp.modules.communication.service.CircularService circularService;
+
+    @Autowired
+    private com.schoolerp.modules.attendance.service.AttendanceComplianceService complianceService;
+
+    @Autowired
+    private com.schoolerp.modules.finance.repository.FeeInvoiceRepository feeInvoiceRepository;
+
     @BeforeEach
     void setUp() {
         TenantContext.setTenantId("tenant_apex_mumbai_01");
@@ -570,5 +585,101 @@ class SchoolErpApplicationTests {
         assertThrows(IllegalStateException.class, () -> {
             ptmService.bookSlot(slotToBook.getId(), student.getId(), "Another Parent", "+91 98201 99999");
         }, "Double booking same PTM slot must be strictly prevented");
+    }
+
+    @Test
+    void testLibraryCirculationAndOverdueFine() {
+        var book = libraryService.registerBook(
+                "Concepts of Modern Physics", "Arthur Beiser", "978-0070151550",
+                "Science", 10, "Shelf SCI-9", "TAG-BEISER-01"
+        );
+        assertNotNull(book);
+        assertEquals(10, book.getAvailableCopies());
+
+        var student = studentRepository.findAllByTenantId("tenant_apex_mumbai_01").get(0);
+        var issueRecord = libraryService.issueBook(book.getId(), student.getId(), 14);
+        assertNotNull(issueRecord);
+        assertEquals("ISSUED", issueRecord.getStatus());
+
+        var updatedBook = libraryService.searchBooks(book.getIsbn()).get(0);
+        assertEquals(9, updatedBook.getAvailableCopies(), "Available copies must decrement on checkout");
+
+        // Return book
+        var returnRecord = libraryService.returnBook(issueRecord.getId());
+        assertNotNull(returnRecord);
+        assertEquals("RETURNED", returnRecord.getStatus());
+        assertNotNull(returnRecord.getReturnedDate());
+
+        var restoredBook = libraryService.searchBooks(book.getIsbn()).get(0);
+        assertEquals(10, restoredBook.getAvailableCopies(), "Available copies must restore on return");
+    }
+
+    @Test
+    void testStaffLeaveApprovalAndAutoSubstitutionTrigger() {
+        var teachers = employeeRepository.findAllByTenantId("tenant_apex_mumbai_01");
+        assertFalse(teachers.isEmpty());
+        var teacher = teachers.get(0);
+
+        var leaveReq = staffLeaveService.applyLeave(
+                teacher.getId(), "CASUAL",
+                java.time.LocalDate.now().plusDays(5),
+                java.time.LocalDate.now().plusDays(5),
+                "CBSE Pedagogy Workshop"
+        );
+        assertNotNull(leaveReq);
+        assertEquals("PENDING", leaveReq.getStatus());
+
+        // Review & Approve
+        var reviewResult = staffLeaveService.reviewLeave(
+                leaveReq.getId(), true, "Approved by Principal", "principal@apexacademy.edu.in"
+        );
+        assertNotNull(reviewResult);
+        assertEquals("APPROVED", reviewResult.leaveRequest().getStatus());
+        assertNotNull(reviewResult.generatedSubstitutions());
+    }
+
+    @Test
+    void testSchoolCircularPublicationAndDigitalParentAcknowledgment() {
+        var circular = circularService.publishCircular(
+                "Winter Uniform Guidelines AY 2026-27",
+                "All students must adhere to the navy blazer and formal tie policy starting Dec 1.",
+                "ALL", null, "IMPORTANT", "s3://apex/circulars/winter-uniform.pdf", "Executive Principal"
+        );
+        assertNotNull(circular);
+        assertEquals("PUBLISHED", circular.getStatus());
+
+        var student = studentRepository.findAllByTenantId("tenant_apex_mumbai_01").get(0);
+        var ack = circularService.acknowledgeCircular(
+                circular.getId(), "parent.rajesh@example.com", "Rajesh Sharma",
+                student.getId(), student.getFullName(), "192.168.1.50", "Understood and agreed"
+        );
+        assertNotNull(ack);
+        assertEquals("parent.rajesh@example.com", ack.getGuardianEmail());
+
+        var acks = circularService.getAcknowledgments(circular.getId());
+        assertEquals(1, acks.size());
+    }
+
+    @Test
+    void testDailyLateFeeSurchargeBatchProcessor() {
+        var asOfDate = java.time.LocalDate.now().plusDays(30);
+        var surcharges = financeService.processDailyLateFees(asOfDate, new BigDecimal("50.00"));
+        assertNotNull(surcharges);
+
+        var trialBalance = financeService.generateTrialBalance();
+        assertNotNull(trialBalance);
+        assertTrue(trialBalance.isBalanced(), "Double-entry general ledger must balance after late fee assessment");
+    }
+
+    @Test
+    void testCbseAttendanceComplianceWatchdog() {
+        var student = studentRepository.findAllByTenantId("tenant_apex_mumbai_01").get(0);
+        var report = complianceService.evaluateStudentCompliance(student.getId());
+        assertNotNull(report);
+        assertEquals(student.getId(), report.getStudentId());
+        assertTrue(report.getAttendancePercentage() >= 0.0 && report.getAttendancePercentage() <= 100.0);
+
+        var defaulters = complianceService.getDefaulters(null, 75.0);
+        assertNotNull(defaulters);
     }
 }

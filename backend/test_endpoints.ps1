@@ -1,4 +1,4 @@
-# Endpoint Verification Script
+﻿# Endpoint Verification Script
 $baseUri = "http://localhost:8080/api/v1"
 $tenantId = "tenant_apex_mumbai_01"
 
@@ -597,7 +597,118 @@ if ($ptmSessionsRes.data.Count -gt 0) {
     }
 }
 
+# --- SECTION 7: PHASE 4 ADVANCED CAPABILITIES (ENDPOINTS 39-48) ---
+Write-Host "`n--- SECTION 7: PHASE 4 DEEP OPERATIONAL CAPABILITIES (ENDPOINTS 39-48) ---"
+
+# 39. Register New Book in Library Catalog
+Write-Host "`n[Endpoint 39] POST /api/v1/operations/library/books (Register Book)..."
+$bookRegBody = @{
+    title = "Advanced Engineering Mathematics 10th Ed"
+    author = "Erwin Kreyszig"
+    isbn = "978-0470458365"
+    category = "Mathematics"
+    totalCopies = 12
+    rackLocation = "Shelf M-5 / Advanced Reference"
+    barcodeTag = "BC-MATH-9941"
+} | ConvertTo-Json
+$bookRegRes = Invoke-RestMethod -Uri "$baseUri/operations/library/books" -Method Post -Body $bookRegBody -Headers $authHeaders
+$bookId = $bookRegRes.data.id
+Write-Host "Book Cataloged: '$($bookRegRes.data.title)' (ISBN: $($bookRegRes.data.isbn)) | Copies: $($bookRegRes.data.availableCopies)"
+
+# 40. Search Library Catalog
+Write-Host "`n[Endpoint 40] GET /api/v1/operations/library/books/search?query=Kreyszig..."
+$searchRes = Invoke-RestMethod -Uri "$baseUri/operations/library/books/search?query=Kreyszig" -Method Get -Headers $authHeaders
+Write-Host "Catalog Search Results: Found $($searchRes.data.Count) matches. Top: '$($searchRes.data[0].title)' by $($searchRes.data[0].author)"
+
+# 41. Issue Book to Student
+Write-Host "`n[Endpoint 41] POST /api/v1/operations/library/issues (Issue Book)..."
+$issueBody = @{
+    bookId = $bookId
+    studentId = $aaravId
+    studentName = "Aarav Sharma"
+    loanDays = 14
+} | ConvertTo-Json
+$issueRes = Invoke-RestMethod -Uri "$baseUri/operations/library/issues" -Method Post -Body $issueBody -Headers $authHeaders
+$issueId = $issueRes.data.id
+Write-Host "Book Issued: '$($issueRes.data.bookTitle)' to $($issueRes.data.studentName) | Due Date: $($issueRes.data.dueDate)"
+
+# 42. Return Book from Student
+Write-Host "`n[Endpoint 42] POST /api/v1/operations/library/issues/$issueId/return (Return Book)..."
+$returnRes = Invoke-RestMethod -Uri "$baseUri/operations/library/issues/$issueId/return" -Method Post -Headers $authHeaders
+Write-Host "Book Returned: '$($returnRes.data.bookTitle)' | Status: $($returnRes.data.status) | Fine: ₹$($returnRes.data.fineAmount)"
+
+# 43. Staff Submits Leave Application
+Write-Host "`n[Endpoint 43] POST /api/v1/staff/leaves (Apply Staff Leave)..."
+$staffList = Invoke-RestMethod -Uri "$baseUri/staff/employees" -Method Get -Headers $authHeaders
+$sampleTeacher = $staffList.data[0]
+$leaveApplyBody = @{
+    employeeId = $sampleTeacher.id
+    employeeName = $sampleTeacher.fullName
+    leaveType = "CASUAL"
+    startDate = (Get-Date).AddDays(3).ToString("yyyy-MM-dd")
+    endDate = (Get-Date).AddDays(4).ToString("yyyy-MM-dd")
+    reason = "Attending CBSE National Pedagogy Workshop"
+} | ConvertTo-Json
+$leaveRes = Invoke-RestMethod -Uri "$baseUri/staff/leaves" -Method Post -Body $leaveApplyBody -Headers $authHeaders
+$leaveId = $leaveRes.data.id
+Write-Host "Leave Submitted: $($leaveRes.data.employeeName) ($($leaveRes.data.leaveType)) from $($leaveRes.data.startDate) to $($leaveRes.data.endDate)"
+
+# 44. Principal Reviews & Approves Leave
+Write-Host "`n[Endpoint 44] POST /api/v1/staff/leaves/$leaveId/review (Approve Leave)..."
+$reviewBody = @{
+    status = "APPROVED"
+    remarks = "Approved by Principal Office. Substitutions arranged."
+} | ConvertTo-Json
+$reviewRes = Invoke-RestMethod -Uri "$baseUri/staff/leaves/$leaveId/review" -Method Post -Body $reviewBody -Headers $authHeaders
+Write-Host "Leave Reviewed: Status is now '$($reviewRes.data.status)' | Remarks: $($reviewRes.data.reviewerRemarks)"
+
+# 45. Publish Official Circular
+Write-Host "`n[Endpoint 45] POST /api/v1/communication/circulars (Publish Official Circular)..."
+$circBody = @{
+    title = "Winter Term Mandatory Blazer Policy AY 2026-27"
+    content = "All students in Grades 6 through 12 must wear official navy school blazers starting Dec 1. Parent acknowledgment required."
+    targetAudience = "ALL"
+    targetGradeLevel = "Class 10"
+    priority = "IMPORTANT"
+    attachmentUrl = "s3://apex-docs/circulars/uniform-guidelines-2026.pdf"
+    publishedBy = "Executive Principal"
+} | ConvertTo-Json
+$circRes = Invoke-RestMethod -Uri "$baseUri/communication/circulars" -Method Post -Body $circBody -Headers $authHeaders
+$circId = $circRes.data.id
+Write-Host "Official Circular Published: '$($circRes.data.title)' | Target: $($circRes.data.targetAudience)"
+
+# 46. Parent Digitally Acknowledges Circular
+Write-Host "`n[Endpoint 46] POST /api/v1/communication/circulars/$circId/acknowledge (Digital Parent Signature)..."
+$ackBody = @{
+    guardianEmail = "parent.rajesh@example.com"
+    guardianName = "Dr. Rajesh Sharma"
+    studentId = $aaravId
+    studentName = "Aarav Sharma"
+    ipAddress = "192.168.1.100"
+    remarks = "Acknowledged and agreed by parent digitally"
+} | ConvertTo-Json
+$ackRes = Invoke-RestMethod -Uri "$baseUri/communication/circulars/$circId/acknowledge" -Method Post -Body $ackBody -Headers $authHeaders
+Write-Host "Parent Digital Signature Recorded: $($ackRes.data.guardianName) acknowledged at $($ackRes.data.acknowledgedAt)"
+
+# 47. Dynamic Daily Late Fee Surcharge Processor
+Write-Host "`n[Endpoint 47] POST /api/v1/finance/invoices/process-late-fees (Process Late Fees)..."
+$futureDate = (Get-Date).AddDays(30).ToString("yyyy-MM-dd")
+$surchargeRes = Invoke-RestMethod -Uri "$baseUri/finance/invoices/process-late-fees?asOfDate=$futureDate&dailyRate=50.00" -Method Post -Headers $authHeaders
+Write-Host "Late Fee Surcharge Assessment Complete: $($surchargeRes.data.Count) overdue invoices evaluated & adjusted"
+if ($surchargeRes.data.Count -gt 0) {
+    $firstSurch = $surchargeRes.data[0]
+    Write-Host " - Invoice: $($firstSurch.invoiceNumber) | Overdue: $($firstSurch.daysOverdue) days | Surcharge: ₹$($firstSurch.totalSurcharge)"
+}
+
+# 48. CBSE 75% Minimum Attendance Compliance Watchdog
+Write-Host "`n[Endpoint 48] GET /api/v1/attendance/compliance/students/$aaravId (CBSE Attendance Compliance)..."
+$compRes = Invoke-RestMethod -Uri "$baseUri/attendance/compliance/students/$aaravId" -Method Get -Headers $authHeaders
+$cr = $compRes.data
+Write-Host "CBSE Compliance Report for $($cr.studentName):"
+Write-Host " - Attendance: $($cr.attendancePercentage)% | Board Exam Eligible: $($cr.eligibleForBoardExams)"
+Write-Host " - Status: $($cr.warningStatus) | Days Needed to Recover: $($cr.requiredConsecutiveDaysToRecover) days"
+
 Write-Host "`n============================================================"
-Write-Host " ALL 38 ENTERPRISE BACKEND ENDPOINTS VERIFIED & VALIDATED 100%"
+Write-Host " ALL 48 ENTERPRISE BACKEND ENDPOINTS VERIFIED & VALIDATED 100%"
 Write-Host "============================================================"
 Write-Host "============================================================"

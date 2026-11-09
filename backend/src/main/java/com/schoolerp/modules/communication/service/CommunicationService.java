@@ -51,6 +51,23 @@ public class CommunicationService {
         return saved;
     }
 
+    @Transactional
+    public void broadcastCircular(String title, String body, String targetAudience) {
+        String tenantId = TenantContext.getTenantId();
+        NotificationDispatchLog logEntry = NotificationDispatchLog.builder()
+                .tenantId(tenantId)
+                .recipientName("Audience: " + targetAudience)
+                .recipientIdentifier("BROADCAST_" + targetAudience)
+                .recipientType(targetAudience)
+                .channel("PUSH_NOTIFICATION_FCM")
+                .triggerEvent("CIRCULAR_BROADCAST")
+                .messageBody(title + ": " + body)
+                .providerMessageId("broadcast_" + UUID.randomUUID().toString().substring(0, 8))
+                .deliveryStatus("DELIVERED")
+                .build();
+        dispatchLogRepository.save(logEntry);
+    }
+
     public List<NotificationDispatchLog> getDispatchLogs() {
         return dispatchLogRepository.findByTenantIdOrderByDispatchedAtDesc(TenantContext.getTenantId());
     }

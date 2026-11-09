@@ -3,6 +3,7 @@ package com.schoolerp.modules.staff.controller;
 import com.schoolerp.common.response.ApiResponse;
 import com.schoolerp.modules.staff.entity.Employee;
 import com.schoolerp.modules.staff.entity.StaffLeaveRequest;
+import com.schoolerp.modules.staff.service.StaffLeaveService;
 import com.schoolerp.modules.staff.service.StaffService;
 import jakarta.validation.Valid;
 import lombok.Data;
@@ -20,6 +21,7 @@ import java.util.UUID;
 public class StaffController {
 
     private final StaffService staffService;
+    private final StaffLeaveService staffLeaveService;
 
     @GetMapping("/employees")
     @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('PRINCIPAL') or hasRole('TEACHER')")
@@ -44,6 +46,18 @@ public class StaffController {
     @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('PRINCIPAL') or hasRole('TEACHER')")
     public ResponseEntity<ApiResponse<List<StaffLeaveRequest>>> getLeaveRequests() {
         return ResponseEntity.ok(ApiResponse.ok(staffService.getLeaveRequests()));
+    }
+
+    @GetMapping("/leaves/pending")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('PRINCIPAL')")
+    public ResponseEntity<ApiResponse<List<StaffLeaveRequest>>> getPendingLeaves() {
+        return ResponseEntity.ok(ApiResponse.ok(staffLeaveService.getPendingLeaves()));
+    }
+
+    @GetMapping("/leaves/employee/{employeeId}")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('PRINCIPAL') or hasRole('TEACHER')")
+    public ResponseEntity<ApiResponse<List<StaffLeaveRequest>>> getEmployeeLeaves(@PathVariable UUID employeeId) {
+        return ResponseEntity.ok(ApiResponse.ok(staffLeaveService.getEmployeeLeaves(employeeId)));
     }
 
     @PostMapping("/leaves")

@@ -2,6 +2,7 @@ package com.schoolerp.modules.operations.controller;
 
 import com.schoolerp.common.response.ApiResponse;
 import com.schoolerp.modules.operations.entity.*;
+import com.schoolerp.modules.operations.service.LibraryService;
 import com.schoolerp.modules.operations.service.OperationsService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,7 @@ import java.util.UUID;
 public class OperationsController {
 
     private final OperationsService operationsService;
+    private final LibraryService libraryService;
 
     // --- Transport Endpoints ---
 
@@ -83,6 +85,26 @@ public class OperationsController {
         return ResponseEntity.ok(ApiResponse.ok(operationsService.getBooks()));
     }
 
+    @PostMapping("/library/books")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('PRINCIPAL') or hasRole('TEACHER')")
+    public ResponseEntity<ApiResponse<Book>> registerBook(@RequestBody BookRegisterDto dto) {
+        Book book = libraryService.registerBook(
+                dto.getTitle(), dto.getAuthor(), dto.getIsbn(), dto.getCategory(),
+                dto.getTotalCopies(), dto.getRackLocation(), dto.getBarcodeTag()
+        );
+        return ResponseEntity.ok(ApiResponse.ok("Book catalog entry created successfully", book));
+    }
+
+    @GetMapping("/library/books/search")
+    public ResponseEntity<ApiResponse<List<Book>>> searchBooks(@RequestParam(required = false) String query) {
+        return ResponseEntity.ok(ApiResponse.ok(libraryService.searchBooks(query)));
+    }
+
+    @GetMapping("/library/students/{studentId}/issues")
+    public ResponseEntity<ApiResponse<List<BookIssueRecord>>> getStudentIssues(@PathVariable UUID studentId) {
+        return ResponseEntity.ok(ApiResponse.ok(libraryService.getStudentIssues(studentId)));
+    }
+
     @GetMapping("/library/issues")
     public ResponseEntity<ApiResponse<List<BookIssueRecord>>> getIssueRecords() {
         return ResponseEntity.ok(ApiResponse.ok(operationsService.getIssueRecords()));
@@ -122,6 +144,17 @@ public class OperationsController {
         private UUID studentId;
         private String studentName;
         private int loanDays;
+    }
+
+    @Data
+    public static class BookRegisterDto {
+        private String title;
+        private String author;
+        private String isbn;
+        private String category;
+        private int totalCopies;
+        private String rackLocation;
+        private String barcodeTag;
     }
 }
 

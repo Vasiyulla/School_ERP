@@ -108,6 +108,16 @@ public class FinanceController {
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
+    @PostMapping("/invoices/process-late-fees")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('ACCOUNTANT')")
+    public ResponseEntity<ApiResponse<List<FinanceService.SurchargeCalculationResult>>> processDailyLateFees(
+            @RequestParam(required = false) String asOfDate,
+            @RequestParam(required = false) BigDecimal dailyRate) {
+        LocalDate date = asOfDate != null ? LocalDate.parse(asOfDate) : LocalDate.now();
+        List<FinanceService.SurchargeCalculationResult> results = financeService.processDailyLateFees(date, dailyRate);
+        return ResponseEntity.ok(ApiResponse.ok("Processed daily late fee surcharges across overdue invoices", results));
+    }
+
     // --- 5. Unified Family Fee Cart Checkout ---
 
     @GetMapping("/family-checkout")

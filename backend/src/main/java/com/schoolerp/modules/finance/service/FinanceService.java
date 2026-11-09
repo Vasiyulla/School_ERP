@@ -352,6 +352,71 @@ public class FinanceService {
                 .build();
     }
 
+    @Transactional
+    public List<SurchargeCalculationResult> processDailyLateFees(LocalDate asOfDate, BigDecimal customDailyRate) {
+        String tenantId = TenantContext.getTenantId();
+        LocalDate checkDate = asOfDate != null ? asOfDate : LocalDate.now();
+        BigDecimal dailyRate = customDailyRate != null ? customDailyRate : BigDecimal.valueOf(50.00);
+
+        List<FeeInvoice> invoices = invoiceRepository.findAllByTenantId(tenantId);
+        List<SurchargeCalculationResult> processed = new ArrayList<>();
+
+        for (FeeInvoice inv : invoices) {
+            if (inv.getDueDate() != null && checkDate.isAfter(inv.getDueDate()) && inv.getBalanceAmount().compareTo(BigDecimal.ZERO) > 0) {
+                long daysOverdue = ChronoUnit.DAYS.between(inv.getDueDate(), checkDate);
+                if (daysOverdue > 0) {
+                    BigDecimal surcharge = dailyRate.multiply(BigDecimal.valueOf(daysOverdue));
+                    inv.setTotalAmount(inv.getTotalAmount().add(surcharge));
+                    inv.setBalanceAmount(inv.getBalanceAmount().add(surcharge));
+                    inv.setStatus("OVERDUE");
+                    invoiceRepository.save(inv);
+
+                    // Atomic Double-Entry Ledger Posting for Late Fee Revenue
+                    // 1. Debit: Late Fee Receivables (Asset Increase)
+                    ledgerRepository.save(FinancialLedgerEntry.builder()
+                            .tenantId(tenantId)
+                            .entryType("LATE_FEE_SURCHARGE")
+                            .accountCode("1030-RECEIVABLES-LATE-FEES")
+                            .debit(surcharge)
+                            .credit(BigDecimal.ZERO)
+                            .description(String.format("Late fee receivable booked on %s (%d days overdue)", inv.getInvoiceNumber(), daysOverdue))
+                            .referenceId(inv.getInvoiceNumber())
+                            .postedAt(Instant.now())
+                            .build());
+
+                    // 2. Credit: Late Fee Surcharge Income (Revenue Increase)
+                    ledgerRepository.save(FinancialLedgerEntry.builder()
+                            .tenantId(tenantId)
+                            .entryType("LATE_FEE_SURCHARGE")
+                            .accountCode("4090-LATE-FEES")
+                            .debit(BigDecimal.ZERO)
+                            .credit(surcharge)
+                            .description(String.format("Daily late fee surcharge assessed on %s (%d days overdue)", inv.getInvoiceNumber(), daysOverdue))
+                            .referenceId(inv.getInvoiceNumber())
+                            .postedAt(Instant.now())
+                            .build());
+
+                    processed.add(SurchargeCalculationResult.builder()
+                            .invoiceNumber(inv.getInvoiceNumber())
+                            .daysOverdue(daysOverdue)
+                            .dailyRate(dailyRate)
+                            .totalSurcharge(surcharge)
+                            .isSurchargeApplicable(true)
+                            .build());
+                }
+            }
+        }
+
+        auditLogService.recordEvent(
+                "PROCESS_LATE_FEES",
+                "finance.invoices",
+                "BATCH",
+                String.format("Assessed late fee surcharges across %d overdue invoices as of %s", processed.size(), checkDate)
+        );
+
+        return processed;
+    }
+
     // --- 5. Unified Multi-Child Family Fee Checkout ---
 
     public FamilyBillingSummaryDTO getFamilyBillingSummary(String guardianEmail) {

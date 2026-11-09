@@ -2,8 +2,10 @@ package com.schoolerp.modules.communication.controller;
 
 import com.schoolerp.common.response.ApiResponse;
 import com.schoolerp.modules.communication.entity.Circular;
+import com.schoolerp.modules.communication.entity.CircularAcknowledgment;
 import com.schoolerp.modules.communication.entity.DeviceToken;
 import com.schoolerp.modules.communication.entity.NotificationDispatchLog;
+import com.schoolerp.modules.communication.service.CircularService;
 import com.schoolerp.modules.communication.service.CommunicationService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +22,7 @@ import java.util.UUID;
 public class CommunicationController {
 
     private final CommunicationService communicationService;
+    private final CircularService circularService;
 
     @GetMapping("/circulars")
     public ResponseEntity<ApiResponse<List<Circular>>> getCirculars() {
@@ -31,6 +34,37 @@ public class CommunicationController {
     public ResponseEntity<ApiResponse<Circular>> publishCircular(@RequestBody Circular circular) {
         Circular saved = communicationService.publishCircular(circular);
         return ResponseEntity.ok(ApiResponse.ok("Circular published successfully", saved));
+    }
+
+    @PostMapping("/circulars/{id}/acknowledge")
+    public ResponseEntity<ApiResponse<CircularAcknowledgment>> acknowledgeCircular(
+            @PathVariable UUID id,
+            @RequestBody AcknowledgeCircularRequest req) {
+        CircularAcknowledgment ack = circularService.acknowledgeCircular(
+                id,
+                req.getGuardianEmail(),
+                req.getGuardianName(),
+                req.getStudentId(),
+                req.getStudentName(),
+                req.getIpAddress(),
+                req.getRemarks()
+        );
+        return ResponseEntity.ok(ApiResponse.ok("Digital circular acknowledgment recorded", ack));
+    }
+
+    @GetMapping("/circulars/{id}/acknowledgments")
+    public ResponseEntity<ApiResponse<List<CircularAcknowledgment>>> getCircularAcknowledgments(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.ok(circularService.getAcknowledgments(id)));
+    }
+
+    @Data
+    public static class AcknowledgeCircularRequest {
+        private String guardianEmail;
+        private String guardianName;
+        private UUID studentId;
+        private String studentName;
+        private String ipAddress;
+        private String remarks;
     }
 
     @GetMapping("/dispatches")

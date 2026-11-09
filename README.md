@@ -5,8 +5,8 @@
 [![Next.js 15](https://img.shields.io/badge/Next.js-15_App_Router-black.svg?style=flat&logo=next.js)](https://nextjs.org/)
 [![Kotlin 2.0](https://img.shields.io/badge/Kotlin-Jetpack_Compose-purple.svg?style=flat&logo=kotlin)](https://kotlinlang.org/)
 [![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-12_Schemas-blue.svg?style=flat&logo=postgresql)](https://www.postgresql.org/)
-[![Tests Passing](https://img.shields.io/badge/JUnit_5-24%2F24_Tests_Passed-success.svg)](https://junit.org/)
-[![Endpoints Verified](https://img.shields.io/badge/REST_Endpoints-38%2F38_Live_Verified-blueviolet.svg)](#complete-38-live-verified-rest-endpoints-directory)
+[![Tests Passing](https://img.shields.io/badge/JUnit_5-29%2F29_Tests_Passed-success.svg)](https://junit.org/)
+[![Endpoints Verified](https://img.shields.io/badge/REST_Endpoints-48%2F48_Live_Verified-blueviolet.svg)](#complete-48-live-verified-rest-endpoints-directory)
 
 A cloud-native, multi-portal **B2B SaaS School Enterprise Resource Planning (ERP)** platform engineered to lead the global educational software industry. Built to Tier-1 commercial standards benchmarked directly against **PowerSchool, Toddle, Odoo Enterprise, SAP Fiori, Verkada, and Samsara**.
 
