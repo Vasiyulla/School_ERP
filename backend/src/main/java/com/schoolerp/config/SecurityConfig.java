@@ -47,8 +47,11 @@ public class SecurityConfig {
                                 "/api/v1/auth/**",
                                 "/api/v1/finance/webhooks/**",
                                 "/api/v1/examinations/gradebook/report-card/verify/**",
+                                "/api/v1/students/transfer-certificates/verify/**",
                                 "/api/v1/staff/payroll/biometric/punch",
                                 "/api/v1/operations/telemetry/**",
+                                "/api/v1/operations/gate-passes/verify-scan",
+                                "/api/v1/mobile/**",
                                 "/h2-console/**",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**"

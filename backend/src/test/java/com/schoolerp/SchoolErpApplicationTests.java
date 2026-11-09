@@ -46,7 +46,25 @@ class SchoolErpApplicationTests {
     private com.schoolerp.modules.students.repository.StudentRepository studentRepository;
 
     @Autowired
+    private com.schoolerp.modules.operations.repository.BookIssueRecordRepository bookIssueRecordRepository;
+
+    @Autowired
     private com.schoolerp.modules.staff.service.PayrollService payrollService;
+
+    @Autowired
+    private com.schoolerp.modules.operations.service.GatePassService gatePassService;
+
+    @Autowired
+    private com.schoolerp.modules.students.service.StudentClearanceService clearanceService;
+
+    @Autowired
+    private com.schoolerp.modules.students.service.InfirmaryService infirmaryService;
+
+    @Autowired
+    private com.schoolerp.modules.academics.service.HomeworkService homeworkService;
+
+    @Autowired
+    private com.schoolerp.modules.mobile.service.MobileParentService mobileParentService;
 
     @Autowired
     private com.schoolerp.modules.academics.service.SubstitutionService substitutionService;
@@ -355,5 +373,127 @@ class SchoolErpApplicationTests {
         assertTrue(result.isGeofenceTriggered(), "Geofence proximity alert must trigger when bus is within 800m of stop");
         assertTrue(result.getDistanceToNearestStopMeters() < 100, "Distance should be under 100 meters");
         assertFalse(result.isOverspeeding(), "35 km/h is within 50 km/h threshold");
+    }
+
+    @Test
+    void testGatePassIssuanceAndTurnstileScan() {
+        var student = studentRepository.findAllByTenantId("tenant_apex_mumbai_01").get(0);
+        var pass = gatePassService.issueGatePass(
+                student.getId(),
+                student.getFullName(),
+                student.getClassName(),
+                student.getGuardianName(),
+                student.getGuardianPhone(),
+                "FATHER",
+                "EARLY_DEPARTURE",
+                "Principal Office"
+        );
+        assertNotNull(pass);
+        assertNotNull(pass.getQrToken());
+        assertEquals("APPROVED", pass.getPassStatus());
+
+        // Test security turnstile scan
+        var scanned = gatePassService.verifyAndScanGatePass(pass.getQrToken(), "Officer Deshmukh - Gate 1");
+        assertNotNull(scanned);
+        assertEquals("SCANNED_EXIT", scanned.getPassStatus());
+        assertNotNull(scanned.getExitTimestamp());
+    }
+
+    @Test
+    void testStudentClearanceAndTransferCertificate() {
+        var student = studentRepository.findAllByTenantId("tenant_apex_mumbai_01").stream()
+                .filter(s -> s.getFullName().contains("Aarav"))
+                .findFirst()
+                .orElseThrow();
+
+        // 1. Initial audit should detect unreturned library book
+        var initialClearance = clearanceService.initiateOrRefreshClearance(student.getId());
+        assertNotNull(initialClearance);
+        assertFalse(initialClearance.isLibraryCleared(), "Must catch that Aarav has an unreturned library book");
+        assertEquals("BLOCKED", initialClearance.getClearanceStatus());
+
+        // 2. Return book to librarian
+        var books = bookIssueRecordRepository.findByTenantIdAndStudentId("tenant_apex_mumbai_01", student.getId());
+        for (var b : books) {
+            b.setStatus("RETURNED");
+            bookIssueRecordRepository.save(b);
+        }
+
+        // 3. Re-evaluate clearance -> All departments cleared
+        var clearance = clearanceService.initiateOrRefreshClearance(student.getId());
+        assertNotNull(clearance);
+        assertTrue(clearance.isLibraryCleared(), "Library must now be cleared after return");
+        assertTrue(clearance.isBursarCleared(), "Aarav Sharma has full fee clearance");
+        assertEquals("CLEARED", clearance.getClearanceStatus());
+
+        var tc = clearanceService.generateTransferCertificate(student.getId(), "PARENT_RELOCATION", "EXEMPLARY");
+        assertNotNull(tc);
+        assertNotNull(tc.getTcNumber());
+        assertNotNull(tc.getVerificationHash());
+        assertEquals("Transferred", studentRepository.findById(student.getId()).orElseThrow().getStatus());
+
+        // Verify public QR hash
+        var verifiedTc = clearanceService.verifyCertificate(tc.getVerificationHash());
+        assertNotNull(verifiedTc);
+        assertEquals(tc.getTcNumber(), verifiedTc.getTcNumber());
+    }
+
+    @Test
+    void testInfirmaryClinicalVisitAndAlert() {
+        var student = studentRepository.findAllByTenantId("tenant_apex_mumbai_01").get(0);
+        var visit = infirmaryService.recordVisit(
+                student.getId(),
+                "HIGH_FEVER",
+                102.1,
+                "118/76",
+                86,
+                "Paracetamol 500mg, ice compress sponge",
+                60,
+                "SENT_HOME_WITH_PARENT",
+                "Sister Mary D'Souza, RN"
+        );
+        assertNotNull(visit);
+        assertTrue(visit.isParentNotified(), "High temperature >= 100 F must trigger parent notification");
+        assertEquals("WHATSAPP_HEALTH_ALERT", visit.getParentAlertChannel());
+    }
+
+    @Test
+    void testHomeworkAssignmentAndGradingLifecycle() {
+        var hw = homeworkService.createAssignment(
+                "Class 10",
+                "Section A",
+                "Physics",
+                "Ray Optics & Refraction Index Lab",
+                "Complete Ray Diagram 5.1 and compute focal lengths.",
+                "Dr. Vikram Seth",
+                java.time.LocalDate.now().plusDays(3),
+                25.0,
+                "https://cdn.apexacademy.edu.in/assignments/physics-optics.pdf"
+        );
+        assertNotNull(hw);
+        assertEquals("Physics", hw.getSubject());
+
+        var student = studentRepository.findAllByTenantId("tenant_apex_mumbai_01").get(0);
+        var sub = homeworkService.submitHomework(hw.getId(), student.getId(), "https://cdn.apexacademy.edu.in/submissions/optics_lab.pdf");
+        assertNotNull(sub);
+        assertEquals("SUBMITTED", sub.getStatus());
+
+        var graded = homeworkService.gradeSubmission(sub.getId(), 24.5, "Excellent ray diagram precision", "Dr. Vikram Seth");
+        assertNotNull(graded);
+        assertEquals("GRADED", graded.getStatus());
+        assertEquals(24.5, graded.getMarksAwarded());
+    }
+
+    @Test
+    void testMobileParentHomeDashboardAggregation() {
+        var dashboard = mobileParentService.getParentDashboard("rajesh.sharma@example.com");
+        assertNotNull(dashboard);
+        assertEquals("Rajesh Sharma", dashboard.getGuardianName());
+        assertFalse(dashboard.getChildren().isEmpty(), "Must aggregate children linked to guardian");
+
+        var firstChild = dashboard.getChildren().get(0);
+        assertNotNull(firstChild.getFullName());
+        assertNotNull(firstChild.getPendingFeeBalance());
+        assertNotNull(firstChild.getGatePassStatus());
     }
 }

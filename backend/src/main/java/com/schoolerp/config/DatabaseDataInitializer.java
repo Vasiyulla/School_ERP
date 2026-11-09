@@ -84,6 +84,12 @@ public class DatabaseDataInitializer implements CommandLineRunner {
     private final TenantModuleLicenseService tenantModuleLicenseService;
     private final PayrollService payrollService;
     private final RouteStopGeofenceRepository geofenceRepository;
+    private final com.schoolerp.modules.operations.service.GatePassService gatePassService;
+    private final com.schoolerp.modules.operations.repository.GatePassRepository gatePassRepository;
+    private final com.schoolerp.modules.students.service.InfirmaryService infirmaryService;
+    private final com.schoolerp.modules.students.repository.InfirmaryVisitRepository infirmaryVisitRepository;
+    private final com.schoolerp.modules.academics.service.HomeworkService homeworkService;
+    private final com.schoolerp.modules.academics.repository.HomeworkAssignmentRepository homeworkAssignmentRepository;
 
     @Override
     public void run(String... args) {
@@ -831,6 +837,74 @@ public class DatabaseDataInitializer implements CommandLineRunner {
                 payrollService.recordPunch(vikram.getId(), "IN", "FACIAL_RECOGNITION", "10.0.8.21");
                 payrollService.configureSalaryStructure(vikram.getId(), new BigDecimal("60000.00"), new BigDecimal("20000.00"));
                 payrollService.generateMonthlyPayroll("2026-11");
+            }
+        }
+
+        // 17. Seed QR Security Gate Pass
+        if (gatePassRepository.count() == 0 && studentRepository.count() > 0) {
+            Student aarav = studentRepository.findAllByTenantId(tenantId).stream()
+                    .filter(s -> s.getFullName().contains("Aarav"))
+                    .findFirst()
+                    .orElse(null);
+
+            if (aarav != null) {
+                gatePassService.issueGatePass(
+                        aarav.getId(),
+                        aarav.getFullName(),
+                        aarav.getClassName() + " - " + aarav.getSectionName(),
+                        aarav.getGuardianName(),
+                        aarav.getGuardianPhone(),
+                        "FATHER",
+                        "DOCTOR_APPOINTMENT",
+                        "Dr. Rajesh Sharma (Principal Desk)"
+                );
+            }
+        }
+
+        // 18. Seed Infirmary Clinical Triage
+        if (infirmaryVisitRepository.count() == 0 && studentRepository.count() > 0) {
+            Student ishaan = studentRepository.findAllByTenantId(tenantId).stream()
+                    .filter(s -> s.getFullName().contains("Ishaan"))
+                    .findFirst()
+                    .orElse(null);
+
+            if (ishaan != null) {
+                infirmaryService.recordVisit(
+                        ishaan.getId(),
+                        "FEVER",
+                        101.4,
+                        "115/75",
+                        82,
+                        "Paracetamol 250mg oral, cold compress sponge, oral hydration",
+                        45,
+                        "SENT_HOME_WITH_PARENT",
+                        "Sister Mary D'Souza, RN"
+                );
+            }
+        }
+
+        // 19. Seed Homework & Submissions
+        if (homeworkAssignmentRepository.count() == 0) {
+            var hw = homeworkService.createAssignment(
+                    "Class 10",
+                    "Section A",
+                    "Mathematics",
+                    "Quadratic Equations & Roots Working",
+                    "Solve Exercise 4.2 Questions 1-12. Show complete discriminant steps.",
+                    "Sunita Rao (TGT Mathematics)",
+                    LocalDate.now().plusDays(2),
+                    20.0,
+                    "https://cdn.apexacademy.edu.in/assignments/math-ch4.pdf"
+            );
+
+            Student aarav = studentRepository.findAllByTenantId(tenantId).stream()
+                    .filter(s -> s.getFullName().contains("Aarav"))
+                    .findFirst()
+                    .orElse(null);
+
+            if (aarav != null) {
+                var sub = homeworkService.submitHomework(hw.getId(), aarav.getId(), "https://cdn.apexacademy.edu.in/submissions/aarav_math_hw.pdf");
+                homeworkService.gradeSubmission(sub.getId(), 19.5, "Flawless discriminant derivation and quadratic formula application.", "Sunita Rao");
             }
         }
 

@@ -11,6 +11,7 @@ import java.util.UUID;
 @Repository
 public interface FeeInvoiceRepository extends JpaRepository<FeeInvoice, UUID> {
     List<FeeInvoice> findAllByTenantId(String tenantId);
+    List<FeeInvoice> findAllByTenantIdAndStudentId(String tenantId, UUID studentId);
     Optional<FeeInvoice> findByIdAndTenantId(UUID id, String tenantId);
     Optional<FeeInvoice> findByInvoiceNumberAndTenantId(String invoiceNumber, String tenantId);
 }
