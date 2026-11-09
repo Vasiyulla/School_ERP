@@ -1,8 +1,11 @@
 package com.schoolerp.modules.finance.service;
 
 import com.schoolerp.common.context.TenantContext;
+import com.schoolerp.modules.finance.dto.*;
 import com.schoolerp.modules.finance.entity.*;
 import com.schoolerp.modules.finance.repository.*;
+import com.schoolerp.modules.students.entity.Student;
+import com.schoolerp.modules.students.repository.StudentRepository;
 import com.schoolerp.modules.system.service.AuditLogService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,9 +17,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
 @Slf4j
 @Service
@@ -29,6 +30,7 @@ public class FinanceService {
     private final FeeStructureRepository feeStructureRepository;
     private final FeeConcessionRepository feeConcessionRepository;
     private final ChequeRecordRepository chequeRecordRepository;
+    private final StudentRepository studentRepository;
     private final AuditLogService auditLogService;
 
     @Transactional(readOnly = true)
@@ -347,6 +349,152 @@ public class FinanceService {
                 .dailyRate(dailyRate)
                 .totalSurcharge(totalSurcharge)
                 .isSurchargeApplicable(true)
+                .build();
+    }
+
+    // --- 5. Unified Multi-Child Family Fee Checkout ---
+
+    public FamilyBillingSummaryDTO getFamilyBillingSummary(String guardianEmail) {
+        String tenantId = TenantContext.getTenantId();
+        List<Student> children = studentRepository.findAllByTenantIdAndGuardianEmail(tenantId, guardianEmail);
+        if (children.isEmpty()) {
+            children = studentRepository.findAllByTenantId(tenantId).stream()
+                    .filter(s -> s.getGuardianEmail() != null && s.getGuardianEmail().equalsIgnoreCase(guardianEmail))
+                    .toList();
+        }
+
+        List<FeeInvoice> allInvoices = invoiceRepository.findAllByTenantId(tenantId);
+
+        List<FamilyBillingSummaryDTO.ChildFeeLineDTO> lines = new ArrayList<>();
+        BigDecimal totalGross = BigDecimal.ZERO;
+        BigDecimal totalConcessions = BigDecimal.ZERO;
+        BigDecimal totalNet = BigDecimal.ZERO;
+
+        String guardianName = children.isEmpty() ? "Guardian" : children.get(0).getGuardianName();
+        String guardianPhone = children.isEmpty() ? "" : children.get(0).getGuardianPhone();
+
+        for (Student child : children) {
+            List<FeeInvoice> childInvoices = allInvoices.stream()
+                    .filter(inv -> inv.getStudentId().equals(child.getId()))
+                    .toList();
+
+            BigDecimal gross = BigDecimal.ZERO;
+            String invNumber = "INV-PENDING";
+            LocalDate dueDate = LocalDate.now().plusDays(15);
+            String status = "PENDING";
+
+            if (!childInvoices.isEmpty()) {
+                FeeInvoice inv = childInvoices.get(0);
+                gross = inv.getBalanceAmount() != null && inv.getBalanceAmount().compareTo(BigDecimal.ZERO) > 0 
+                        ? inv.getBalanceAmount() 
+                        : (inv.getTotalAmount() != null ? inv.getTotalAmount() : new BigDecimal("45000.00"));
+                invNumber = inv.getInvoiceNumber();
+                dueDate = inv.getDueDate();
+                status = inv.getStatus();
+            } else {
+                gross = child.getClassName().contains("10") ? new BigDecimal("45000.00") : new BigDecimal("38000.00");
+            }
+
+            ConcessionCalculationResult conc = calculateNetFee(child.getId(), gross);
+
+            lines.add(FamilyBillingSummaryDTO.ChildFeeLineDTO.builder()
+                    .studentId(child.getId())
+                    .studentName(child.getFullName())
+                    .admissionNumber(child.getAdmissionNumber())
+                    .className(child.getClassName())
+                    .sectionName(child.getSectionName())
+                    .invoiceNumber(invNumber)
+                    .dueDate(dueDate)
+                    .grossAmount(gross)
+                    .concessionType(conc.getConcessionType())
+                    .concessionAmount(conc.getDiscountAmount())
+                    .netAmount(conc.getNetFee())
+                    .invoiceStatus(status)
+                    .build());
+
+            totalGross = totalGross.add(gross);
+            totalConcessions = totalConcessions.add(conc.getDiscountAmount());
+            totalNet = totalNet.add(conc.getNetFee());
+        }
+
+        return FamilyBillingSummaryDTO.builder()
+                .guardianName(guardianName)
+                .guardianEmail(guardianEmail)
+                .guardianPhone(guardianPhone)
+                .childrenLines(lines)
+                .totalGrossFee(totalGross)
+                .totalSiblingConcessions(totalConcessions)
+                .totalNetPayable(totalNet)
+                .unifiedOrderId("order_fam_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12))
+                .currency("INR")
+                .paymentGateway("RAZORPAY")
+                .build();
+    }
+
+    // --- 6. Double-Entry General Ledger Trial Balance Statement ---
+
+    public TrialBalanceDTO generateTrialBalance() {
+        String tenantId = TenantContext.getTenantId();
+        List<FinancialLedgerEntry> entries = ledgerRepository.findAllByTenantIdOrderByPostedAtDesc(tenantId);
+
+        Map<String, BigDecimal[]> balanceMap = new LinkedHashMap<>();
+
+        for (FinancialLedgerEntry e : entries) {
+            balanceMap.putIfAbsent(e.getAccountCode(), new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO});
+            BigDecimal[] sums = balanceMap.get(e.getAccountCode());
+            sums[0] = sums[0].add(e.getDebit() != null ? e.getDebit() : BigDecimal.ZERO);
+            sums[1] = sums[1].add(e.getCredit() != null ? e.getCredit() : BigDecimal.ZERO);
+        }
+
+        List<TrialBalanceDTO.AccountBalanceDTO> accounts = new ArrayList<>();
+        BigDecimal totalDebitSum = BigDecimal.ZERO;
+        BigDecimal totalCreditSum = BigDecimal.ZERO;
+
+        for (Map.Entry<String, BigDecimal[]> entry : balanceMap.entrySet()) {
+            String code = entry.getKey();
+            BigDecimal dr = entry.getValue()[0];
+            BigDecimal cr = entry.getValue()[1];
+
+            String category = "ASSET";
+            String name = code;
+            if (code.startsWith("1")) {
+                category = "ASSET";
+                name = code.contains("BANK") ? "HDFC Operational Bank Account" : "Cash / Bank";
+            } else if (code.startsWith("2")) {
+                category = "LIABILITY";
+                name = "Statutory Remittances Payable (PF/ESI/TDS)";
+            } else if (code.startsWith("4")) {
+                category = "REVENUE";
+                name = "Tuition & Academic Fees Revenue";
+            } else if (code.startsWith("5")) {
+                category = "EXPENSE";
+                name = code.contains("SALARIES") ? "Faculty & Staff Payroll Expenses" : "Bank Charges & Dishonour Penalties";
+            }
+
+            BigDecimal net = dr.subtract(cr);
+
+            accounts.add(TrialBalanceDTO.AccountBalanceDTO.builder()
+                    .accountCode(code)
+                    .accountName(name)
+                    .accountCategory(category)
+                    .totalDebit(dr)
+                    .totalCredit(cr)
+                    .netBalance(net)
+                    .build());
+
+            totalDebitSum = totalDebitSum.add(dr);
+            totalCreditSum = totalCreditSum.add(cr);
+        }
+
+        boolean isBalanced = totalDebitSum.compareTo(totalCreditSum) == 0;
+
+        return TrialBalanceDTO.builder()
+                .tenantId(tenantId)
+                .generatedAt(Instant.now())
+                .accounts(accounts)
+                .totalDebitSum(totalDebitSum)
+                .totalCreditSum(totalCreditSum)
+                .isBalanced(isBalanced)
                 .build();
     }
 

@@ -1,5 +1,7 @@
 package com.schoolerp.config;
 
+import com.schoolerp.common.context.TenantContext;
+
 import com.schoolerp.modules.academics.entity.ClassSection;
 import com.schoolerp.modules.academics.entity.TimetablePeriod;
 import com.schoolerp.modules.academics.repository.ClassSectionRepository;
@@ -25,6 +27,7 @@ import com.schoolerp.modules.staff.entity.Employee;
 import com.schoolerp.modules.staff.entity.StaffLeaveRequest;
 import com.schoolerp.modules.staff.repository.EmployeeRepository;
 import com.schoolerp.modules.staff.repository.StaffLeaveRequestRepository;
+import com.schoolerp.modules.staff.service.PayrollService;
 import com.schoolerp.modules.students.entity.Student;
 import com.schoolerp.modules.students.entity.StudentDocument;
 import com.schoolerp.modules.students.repository.StudentDocumentRepository;
@@ -79,12 +82,15 @@ public class DatabaseDataInitializer implements CommandLineRunner {
     private final NotificationDispatchLogRepository dispatchLogRepository;
     private final DeviceTokenRepository deviceTokenRepository;
     private final TenantModuleLicenseService tenantModuleLicenseService;
+    private final PayrollService payrollService;
+    private final RouteStopGeofenceRepository geofenceRepository;
 
     @Override
     public void run(String... args) {
         log.info("Starting enterprise multi-tenant seed sequence across 12 schemas...");
 
         String tenantId = "tenant_apex_mumbai_01";
+        TenantContext.setTenantId(tenantId);
 
         // 1. Seed Tenant
         Tenant apexTenant = tenantRepository.findByTenantIdentifier(tenantId)
@@ -784,6 +790,48 @@ public class DatabaseDataInitializer implements CommandLineRunner {
                     .appVersion("1.0.0-parent-native")
                     .status("ACTIVE")
                     .build());
+        }
+
+        // 15. Seed Route Stop Geofences for Samsara Telematics
+        if (geofenceRepository.count() == 0 && transportRouteRepository.count() > 0) {
+            TransportRoute route7 = transportRouteRepository.findByTenantId(tenantId).get(0);
+            geofenceRepository.save(RouteStopGeofence.builder()
+                    .tenantId(tenantId)
+                    .routeId(route7.getId())
+                    .stopName("Lokhandwala Circle Stop")
+                    .stopSequence(1)
+                    .latitude(19.1415)
+                    .longitude(72.8312)
+                    .radiusMeters(800.0)
+                    .scheduledMorningTime("06:45 AM")
+                    .scheduledEveningTime("03:30 PM")
+                    .build());
+
+            geofenceRepository.save(RouteStopGeofence.builder()
+                    .tenantId(tenantId)
+                    .routeId(route7.getId())
+                    .stopName("DN Nagar Metro Stop")
+                    .stopSequence(2)
+                    .latitude(19.1308)
+                    .longitude(72.8340)
+                    .radiusMeters(800.0)
+                    .scheduledMorningTime("07:15 AM")
+                    .scheduledEveningTime("03:50 PM")
+                    .build());
+        }
+
+        // 16. Seed Staff Payroll & Biometric Turnstile Punches
+        if (employeeRepository.count() > 0) {
+            Employee vikram = employeeRepository.findAllByTenantId(tenantId).stream()
+                    .filter(e -> e.getFullName().contains("Vikram"))
+                    .findFirst()
+                    .orElse(null);
+
+            if (vikram != null) {
+                payrollService.recordPunch(vikram.getId(), "IN", "FACIAL_RECOGNITION", "10.0.8.21");
+                payrollService.configureSalaryStructure(vikram.getId(), new BigDecimal("60000.00"), new BigDecimal("20000.00"));
+                payrollService.generateMonthlyPayroll("2026-11");
+            }
         }
 
         log.info("Multi-tenant enterprise seed sequence completed successfully.");

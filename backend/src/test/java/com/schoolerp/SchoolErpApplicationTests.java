@@ -45,6 +45,15 @@ class SchoolErpApplicationTests {
     @Autowired
     private com.schoolerp.modules.students.repository.StudentRepository studentRepository;
 
+    @Autowired
+    private com.schoolerp.modules.staff.service.PayrollService payrollService;
+
+    @Autowired
+    private com.schoolerp.modules.academics.service.SubstitutionService substitutionService;
+
+    @Autowired
+    private com.schoolerp.modules.staff.repository.EmployeeRepository employeeRepository;
+
     @BeforeEach
     void setUp() {
         TenantContext.setTenantId("tenant_apex_mumbai_01");
@@ -264,5 +273,87 @@ class SchoolErpApplicationTests {
         // Restore to true
         var restored = licenseService.toggleModule("FLEET_GPS", true, "SUPER_ADMIN");
         assertTrue(restored.isEnabled(), "Module should be restored to true");
+    }
+
+    @Test
+    void testBiometricPunchAndStaffPayroll() {
+        var employees = employeeRepository.findAllByTenantId("tenant_apex_mumbai_01");
+        assertFalse(employees.isEmpty());
+        var vikram = employees.stream().filter(e -> e.getFullName().contains("Vikram")).findFirst().orElse(null);
+        assertNotNull(vikram);
+
+        // Biometric turnstile punch
+        var punch = payrollService.recordPunch(vikram.getId(), "IN", "FACIAL_RECOGNITION", "10.0.8.21");
+        assertNotNull(punch);
+        assertEquals("Dr. Vikram Seth", punch.getEmployeeName());
+
+        // Monthly payroll generation & statutory deduction math
+        var payrollRecords = payrollService.generateMonthlyPayroll("2026-11");
+        assertFalse(payrollRecords.isEmpty());
+        var vikramPayroll = payrollRecords.stream().filter(p -> p.getEmployeeId().equals(vikram.getId())).findFirst().orElse(null);
+        assertNotNull(vikramPayroll);
+
+        // Verify PF (12% of Basic) and statutory professional tax
+        assertTrue(vikramPayroll.getProvidentFund().compareTo(BigDecimal.ZERO) > 0);
+        assertEquals(0, new BigDecimal("200.00").compareTo(vikramPayroll.getProfessionalTax()));
+        assertTrue(vikramPayroll.getNetSalary().compareTo(BigDecimal.ZERO) > 0);
+        assertEquals("DISBURSED", vikramPayroll.getPaymentStatus());
+    }
+
+    @Test
+    void testTeacherSubstitutionAlgorithm() {
+        var employees = employeeRepository.findAllByTenantId("tenant_apex_mumbai_01");
+        var vikram = employees.stream().filter(e -> e.getFullName().contains("Vikram")).findFirst().orElse(null);
+        assertNotNull(vikram);
+
+        // Monday recommendations
+        var nextMonday = java.time.LocalDate.now().with(java.time.temporal.TemporalAdjusters.nextOrSame(java.time.DayOfWeek.MONDAY));
+        var recommendations = substitutionService.getRecommendations(nextMonday, vikram.getId());
+        assertNotNull(recommendations);
+
+        // Assign substitute for Period 1
+        var substitution = substitutionService.assignSubstitution(
+                nextMonday, 1, "08:30 – 09:15", "Class 10", "Section A", "Homeroom & Roll Call", "Room 301",
+                vikram.getId(), vikram.getFullName(),
+                employees.get(1).getId(), employees.get(1).getFullName(),
+                "Principal Office"
+        );
+        assertNotNull(substitution);
+        assertEquals("ASSIGNED", substitution.getStatus());
+        assertEquals("Class 10", substitution.getClassName());
+    }
+
+    @Test
+    void testFamilyBillingCheckoutAndTrialBalance() {
+        // Unified Family Billing Cart for Rajesh Sharma (Father of Aarav & Rhea)
+        var familyBilling = financeService.getFamilyBillingSummary("rajesh.sharma@example.com");
+        assertNotNull(familyBilling);
+        assertEquals("Rajesh Sharma", familyBilling.getGuardianName());
+        assertTrue(familyBilling.getChildrenLines().size() >= 2, "Should group Aarav and Rhea under single family billing");
+        assertTrue(familyBilling.getTotalSiblingConcessions().compareTo(BigDecimal.ZERO) > 0, "15% sibling concession must be reflected");
+        assertNotNull(familyBilling.getUnifiedOrderId());
+
+        // Double-Entry General Ledger Trial Balance
+        var trialBalance = financeService.generateTrialBalance();
+        assertNotNull(trialBalance);
+        assertFalse(trialBalance.getAccounts().isEmpty());
+        assertTrue(trialBalance.getTotalDebitSum().compareTo(BigDecimal.ZERO) > 0);
+        assertTrue(trialBalance.getTotalCreditSum().compareTo(BigDecimal.ZERO) > 0);
+        assertTrue(trialBalance.isBalanced(), "Total debits must strictly equal total credits across all ledger accounts");
+    }
+
+    @Test
+    void testSamsaraGeofencingTelematics() {
+        // Telemetry ping right near Lokhandwala Circle Stop (Lat 19.1415, Lng 72.8312)
+        var result = operationsService.processGpsPingWithGeofencing(
+                "MH-02-CB-4012",
+                19.1416, 72.8313,
+                35.0, 140.0
+        );
+        assertNotNull(result);
+        assertEquals("MH-02-CB-4012", result.getVehicleRegistration());
+        assertTrue(result.isGeofenceTriggered(), "Geofence proximity alert must trigger when bus is within 800m of stop");
+        assertTrue(result.getDistanceToNearestStopMeters() < 100, "Distance should be under 100 meters");
+        assertFalse(result.isOverspeeding(), "35 km/h is within 50 km/h threshold");
     }
 }

@@ -1,6 +1,8 @@
 package com.schoolerp.modules.finance.controller;
 
 import com.schoolerp.common.response.ApiResponse;
+import com.schoolerp.modules.finance.dto.FamilyBillingSummaryDTO;
+import com.schoolerp.modules.finance.dto.TrialBalanceDTO;
 import com.schoolerp.modules.finance.entity.*;
 import com.schoolerp.modules.finance.service.FinanceService;
 import lombok.Data;
@@ -104,6 +106,24 @@ public class FinanceController {
         LocalDate date = asOfDate != null ? LocalDate.parse(asOfDate) : LocalDate.now();
         var result = financeService.calculateLateFeeSurcharge(id, date);
         return ResponseEntity.ok(ApiResponse.ok(result));
+    }
+
+    // --- 5. Unified Family Fee Cart Checkout ---
+
+    @GetMapping("/family-checkout")
+    public ResponseEntity<ApiResponse<FamilyBillingSummaryDTO>> getFamilyBilling(
+            @RequestParam String guardianEmail) {
+        FamilyBillingSummaryDTO summary = financeService.getFamilyBillingSummary(guardianEmail);
+        return ResponseEntity.ok(ApiResponse.ok("Unified family fee summary generated", summary));
+    }
+
+    // --- 6. Double-Entry General Ledger Trial Balance ---
+
+    @GetMapping("/reports/trial-balance")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('ACCOUNTANT')")
+    public ResponseEntity<ApiResponse<TrialBalanceDTO>> getTrialBalance() {
+        TrialBalanceDTO trialBalance = financeService.generateTrialBalance();
+        return ResponseEntity.ok(ApiResponse.ok("General ledger trial balance statement generated", trialBalance));
     }
 
     // --- Webhook & Collection Endpoints ---

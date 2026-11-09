@@ -50,6 +50,32 @@ public class OperationsController {
                 .orElse(ResponseEntity.ok(ApiResponse.ok("No telemetry received yet", null)));
     }
 
+    @PostMapping("/telemetry/geofence-ping")
+    public ResponseEntity<ApiResponse<OperationsService.GeofenceTelemetryResult>> processGeofencePing(@RequestBody GpsPingDto dto) {
+        var result = operationsService.processGpsPingWithGeofencing(
+                dto.getVehicleRegistration(),
+                dto.getLatitude(),
+                dto.getLongitude(),
+                dto.getSpeedKmph(),
+                dto.getHeadingDegrees()
+        );
+        return ResponseEntity.ok(ApiResponse.ok("Geofence proximity telemetry processed", result));
+    }
+
+    @GetMapping("/routes/{routeId}/geofences")
+    public ResponseEntity<ApiResponse<List<RouteStopGeofence>>> getRouteGeofences(@PathVariable UUID routeId) {
+        return ResponseEntity.ok(ApiResponse.ok(operationsService.getGeofencesForRoute(routeId)));
+    }
+
+    @PostMapping("/routes/{routeId}/geofences")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('TRANSPORT_MANAGER')")
+    public ResponseEntity<ApiResponse<RouteStopGeofence>> configureGeofence(
+            @PathVariable UUID routeId,
+            @RequestBody RouteStopGeofence geofence) {
+        geofence.setRouteId(routeId);
+        return ResponseEntity.ok(ApiResponse.ok("Geofence stop configured", operationsService.configureGeofence(geofence)));
+    }
+
     // --- Library Endpoints ---
 
     @GetMapping("/library/books")

@@ -11,6 +11,7 @@ import java.util.UUID;
 @Repository
 public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
     List<Employee> findByTenantId(String tenantId);
+    List<Employee> findAllByTenantId(String tenantId);
     Optional<Employee> findByTenantIdAndEmployeeCode(String tenantId, String employeeCode);
     Optional<Employee> findByTenantIdAndEmail(String tenantId, String email);
     List<Employee> findByTenantIdAndDepartment(String tenantId, String department);

@@ -11,5 +11,6 @@ import java.util.UUID;
 public interface TimetablePeriodRepository extends JpaRepository<TimetablePeriod, UUID> {
     List<TimetablePeriod> findAllByTenantIdAndDayOfWeekOrderByPeriodNumberAsc(String tenantId, String dayOfWeek);
     List<TimetablePeriod> findAllByTenantId(String tenantId);
+    List<TimetablePeriod> findAllByTenantIdAndTeacherNameAndDayOfWeek(String tenantId, String teacherName, String dayOfWeek);
 }
 

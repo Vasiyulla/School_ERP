@@ -1,9 +1,14 @@
 package com.schoolerp.modules.operations.service;
 
 import com.schoolerp.common.context.TenantContext;
+import com.schoolerp.modules.communication.service.CommunicationService;
 import com.schoolerp.modules.operations.entity.*;
 import com.schoolerp.modules.operations.repository.*;
 import com.schoolerp.modules.system.service.AuditLogService;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -11,9 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
 @Slf4j
 @Service
@@ -23,11 +26,13 @@ public class OperationsService {
     private final VehicleRepository vehicleRepository;
     private final TransportRouteRepository transportRouteRepository;
     private final GpsPingRepository gpsPingRepository;
+    private final RouteStopGeofenceRepository geofenceRepository;
     private final BookRepository bookRepository;
     private final BookIssueRecordRepository bookIssueRecordRepository;
+    private final CommunicationService communicationService;
     private final AuditLogService auditLogService;
 
-    // --- Transport Operations ---
+    // --- Transport Operations & Samsara-Style Telematics ---
 
     public List<Vehicle> getVehicles() {
         return vehicleRepository.findByTenantId(TenantContext.getTenantId());
@@ -51,9 +56,109 @@ public class OperationsService {
         return gpsPingRepository.save(ping);
     }
 
+    @Transactional
+    public GeofenceTelemetryResult processGpsPingWithGeofencing(String vehicleReg, double lat, double lng, double speed, double heading) {
+        String tenantId = TenantContext.getTenantId();
+
+        // 1. Record raw GPS ping
+        GpsPing ping = recordGpsPing(vehicleReg, lat, lng, speed, heading);
+
+        // 2. Speed Violation Guard (Samsara Telematics safety scorecard)
+        boolean isOverspeeding = speed > 50.0; // 50 km/h school zone limit
+        if (isOverspeeding) {
+            auditLogService.recordEvent(
+                    "OVERSPEED_WARNING",
+                    "operations.telematics",
+                    vehicleReg,
+                    String.format("Bus %s exceeded speed threshold: %.1f km/h (Limit: 50 km/h)", vehicleReg, speed)
+            );
+        }
+
+        // 3. Geofence Proximity Trigger Analysis
+        List<TransportRoute> routes = transportRouteRepository.findByTenantId(tenantId);
+        TransportRoute vehicleRoute = routes.stream()
+                .filter(r -> vehicleReg.equalsIgnoreCase(r.getVehicleRegistration()))
+                .findFirst()
+                .orElse(null);
+
+        String triggeredStop = null;
+        double nearestDistanceMeters = Double.MAX_VALUE;
+        boolean geofenceTriggered = false;
+
+        if (vehicleRoute != null) {
+            List<RouteStopGeofence> geofences = geofenceRepository
+                    .findByTenantIdAndRouteIdOrderByStopSequenceAsc(tenantId, vehicleRoute.getId());
+
+            for (RouteStopGeofence stop : geofences) {
+                double distance = calculateHaversineDistanceMeters(lat, lng, stop.getLatitude(), stop.getLongitude());
+                if (distance < nearestDistanceMeters) {
+                    nearestDistanceMeters = distance;
+                    triggeredStop = stop.getStopName();
+                }
+
+                if (distance <= stop.getRadiusMeters()) {
+                    geofenceTriggered = true;
+                    // Trigger automated parent proximity alert
+                    int estimatedMinutes = Math.max(1, (int) Math.round((distance / 1000.0) / Math.max(speed, 20.0) * 60.0));
+                    String alertBody = String.format("School Bus %s is %d meters away from %s (ETA: ~%d mins).",
+                            vehicleReg, (int) Math.round(distance), stop.getStopName(), estimatedMinutes);
+
+                    communicationService.sendPushNotification(
+                            UUID.randomUUID(), // Target registered parents linked to this stop
+                            "Parents at " + stop.getStopName(),
+                            "Bus Proximity Alert",
+                            alertBody,
+                            "GEOFENCE_PROXIMITY"
+                    );
+
+                    auditLogService.recordEvent(
+                            "GEOFENCE_ALERT_TRIGGERED",
+                            "operations.telematics",
+                            vehicleReg,
+                            String.format("Geofence triggered for %s at %s. Distance: %.1fm",
+                                    vehicleReg, stop.getStopName(), distance)
+                    );
+                    break;
+                }
+            }
+        }
+
+        return GeofenceTelemetryResult.builder()
+                .vehicleRegistration(vehicleReg)
+                .currentSpeed(speed)
+                .isOverspeeding(isOverspeeding)
+                .nearestStop(triggeredStop != null ? triggeredStop : "En Route")
+                .distanceToNearestStopMeters(nearestDistanceMeters < Double.MAX_VALUE ? (int) Math.round(nearestDistanceMeters) : 0)
+                .geofenceTriggered(geofenceTriggered)
+                .latitude(lat)
+                .longitude(lng)
+                .build();
+    }
+
+    public List<RouteStopGeofence> getGeofencesForRoute(UUID routeId) {
+        return geofenceRepository.findByTenantIdAndRouteIdOrderByStopSequenceAsc(TenantContext.getTenantId(), routeId);
+    }
+
+    @Transactional
+    public RouteStopGeofence configureGeofence(RouteStopGeofence geofence) {
+        geofence.setTenantId(TenantContext.getTenantId());
+        return geofenceRepository.save(geofence);
+    }
+
     public Optional<GpsPing> getLatestVehicleLocation(String vehicleRegistration) {
         return gpsPingRepository.findTop1ByTenantIdAndVehicleRegistrationOrderByRecordedAtDesc(
                 TenantContext.getTenantId(), vehicleRegistration);
+    }
+
+    public static double calculateHaversineDistanceMeters(double lat1, double lon1, double lat2, double lon2) {
+        final int R = 6371000;
+        double latDistance = Math.toRadians(lat2 - lat1);
+        double lonDistance = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(latDistance / 2) * Math.sin(latDistance / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(lonDistance / 2) * Math.sin(lonDistance / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
     }
 
     // --- Library Operations ---
@@ -132,5 +237,19 @@ public class OperationsService {
         );
         return saved;
     }
-}
 
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class GeofenceTelemetryResult {
+        private String vehicleRegistration;
+        private double currentSpeed;
+        private boolean isOverspeeding;
+        private String nearestStop;
+        private int distanceToNearestStopMeters;
+        private boolean geofenceTriggered;
+        private double latitude;
+        private double longitude;
+    }
+}
