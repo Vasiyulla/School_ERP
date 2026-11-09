@@ -231,6 +231,76 @@ if ($invoicesRes.data.Count -gt 0) {
     Write-Host " - Is Surcharge Applicable: $($surchargeRes.data.isSurchargeApplicable)"
 }
 
+Write-Host "`n17. Testing CBSE 70/20/10 Consolidated Report Card (GET /api/v1/examinations/gradebook/report-card)..."
+$reportCardRes = Invoke-RestMethod -Uri "$baseUri/examinations/gradebook/report-card?studentId=$($student.id)&termName=Term 1 Mid-Term" -Method Get -Headers $authHeaders
+$rc = $reportCardRes.data
+Write-Host "Report Card Compiled for $($rc.studentName) ($($rc.className) - $($rc.sectionName), Roll #$($rc.rollNumber)):"
+Write-Host " - School Affiliation: $($rc.schoolName) ($($rc.affiliationNumber))"
+Write-Host " - Total Weighted Marks: $($rc.totalMarksObtained) / $($rc.totalMaxMarks) ($($rc.percentage)%)"
+Write-Host " - CBSE CGPA (10-Point Scale): $($rc.cgpa) | Overall Grade: $($rc.overallGrade) | Status: $($rc.resultStatus)"
+Write-Host " - Section Rank: Rank #$($rc.classRank) out of $($rc.totalStudentsInClass) students"
+Write-Host " - Principal Signature: $($rc.principalSignatureStatus)"
+Write-Host " - SHA-256 Verification Hash: $($rc.verificationHash)"
+Write-Host " - Verification URL: $($rc.verificationUrl)"
+
+Write-Host "`n18. Testing Public Authenticity Verification without Auth Token (GET /api/v1/examinations/gradebook/report-card/verify)..."
+# Calling with no Authorization header to confirm public tamper-proof validation
+$publicHeaders = @{
+    "Content-Type" = "application/json"
+    "X-Tenant-ID" = $tenantId
+}
+$verifyRes = Invoke-RestMethod -Uri "$baseUri/examinations/gradebook/report-card/verify?hash=$($rc.verificationHash)" -Method Get -Headers $publicHeaders
+Write-Host "Public Verification Result: $($verifyRes.message)"
+Write-Host " - Student: $($verifyRes.data.studentName) (Admission No: $($verifyRes.data.admissionNumber))"
+Write-Host " - Percentage: $($verifyRes.data.percentage)%, CGPA: $($verifyRes.data.cgpa), Grade: $($verifyRes.data.overallGrade)"
+Write-Host " - Ledger Verification Status: $($verifyRes.data.verificationStatus) (Issued: $($verifyRes.data.issuedAt))"
+
+Write-Host "`n19. Testing Mobile Device Token Registration (POST & GET /api/v1/communication/devices)..."
+$deviceBody = @{
+    userId = [guid]::NewGuid().ToString()
+    userEmail = "parent.test@apexacademy.edu.in"
+    userRole = "PARENT"
+    deviceToken = "fcm_token_pixel8_test_" + (Get-Random -Minimum 1000 -Maximum 9999)
+    deviceType = "ANDROID"
+    deviceModel = "Google Pixel 8 Pro"
+    appVersion = "1.0.0-parent-native"
+} | ConvertTo-Json
+
+$regDeviceRes = Invoke-RestMethod -Uri "$baseUri/communication/devices/register" -Method Post -Body $deviceBody -Headers $authHeaders
+Write-Host "Device Token Registered: $($regDeviceRes.data.deviceModel) ($($regDeviceRes.data.deviceType)) for $($regDeviceRes.data.userEmail)"
+
+$devicesRes = Invoke-RestMethod -Uri "$baseUri/communication/devices" -Method Get -Headers $authHeaders
+Write-Host "Total Active Mobile Devices Registered: $($devicesRes.data.Count)"
+
+Write-Host "`n20. Testing High-Priority FCM Push Notification Dispatch (POST /api/v1/communication/devices/push-test)..."
+$pushBody = @{
+    userId = [guid]::NewGuid().ToString()
+    recipientName = "Rajesh Sharma"
+    title = "Live Bus GPS Alert"
+    body = "School Bus MH-02-CB-4012 is arriving at your designated stop (Lokhandwala Circle) in 3 minutes."
+    eventType = "FLEET_GPS_PROXIMITY"
+} | ConvertTo-Json
+
+$pushRes = Invoke-RestMethod -Uri "$baseUri/communication/devices/push-test" -Method Post -Body $pushBody -Headers $authHeaders
+Write-Host "FCM Push Dispatch Result: $($pushRes.data.deliveryStatus) via channel $($pushRes.data.channel)"
+Write-Host "Provider Message ID: $($pushRes.data.providerMessageId)"
+
+Write-Host "`n21. Testing Odoo-Style Dynamic Tenant Module Licensing (GET & POST /api/v1/system/modules)..."
+$modulesRes = Invoke-RestMethod -Uri "$baseUri/system/modules" -Method Get -Headers $authHeaders
+Write-Host "Retrieved $($modulesRes.data.Count) licensed enterprise modules for tenant:"
+foreach ($m in $modulesRes.data) {
+    Write-Host " - Module: $($m.moduleKey) [$($m.moduleName)] | Tier: $($m.tier) | Enabled: $($m.enabled)"
+}
+
+# Test toggling module state
+$toggleBody = @{ enabled = $false } | ConvertTo-Json
+$toggleRes = Invoke-RestMethod -Uri "$baseUri/system/modules/FLEET_GPS/toggle" -Method Post -Body $toggleBody -Headers $authHeaders
+Write-Host "Toggled module FLEET_GPS to: enabled = $($toggleRes.data.enabled)"
+# Restore module state
+$restoreBody = @{ enabled = $true } | ConvertTo-Json
+$restoreRes = Invoke-RestMethod -Uri "$baseUri/system/modules/FLEET_GPS/toggle" -Method Post -Body $restoreBody -Headers $authHeaders
+Write-Host "Restored module FLEET_GPS to: enabled = $($restoreRes.data.enabled)"
+
 Write-Host "`n============================================================"
 Write-Host " ALL ENTERPRISE BACKEND ENDPOINTS VERIFIED & VALIDATED 100%"
 Write-Host "============================================================"

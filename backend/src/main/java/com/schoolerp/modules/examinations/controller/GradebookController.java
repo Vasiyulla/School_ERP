@@ -1,6 +1,8 @@
 package com.schoolerp.modules.examinations.controller;
 
 import com.schoolerp.common.response.ApiResponse;
+import com.schoolerp.modules.examinations.dto.ReportCardDTO;
+import com.schoolerp.modules.examinations.entity.ReportCardVerificationRecord;
 import com.schoolerp.modules.examinations.entity.StudentMark;
 import com.schoolerp.modules.examinations.service.GradebookService;
 import lombok.Data;
@@ -50,6 +52,21 @@ public class GradebookController {
             @RequestParam String subject) {
         List<StudentMark> locked = gradebookService.lockGradebook(termName, subject);
         return ResponseEntity.ok(ApiResponse.ok("Gradebook officially locked", locked));
+    }
+
+    @GetMapping("/report-card")
+    public ResponseEntity<ApiResponse<ReportCardDTO>> getReportCard(
+            @RequestParam UUID studentId,
+            @RequestParam(defaultValue = "Term 1 Mid-Term") String termName) {
+        ReportCardDTO reportCard = gradebookService.compileReportCard(studentId, termName);
+        return ResponseEntity.ok(ApiResponse.ok(reportCard));
+    }
+
+    @GetMapping("/report-card/verify")
+    public ResponseEntity<ApiResponse<ReportCardVerificationRecord>> verifyReportCard(
+            @RequestParam String hash) {
+        ReportCardVerificationRecord record = gradebookService.verifyReportCard(hash);
+        return ResponseEntity.ok(ApiResponse.ok("Report Card Cryptographically Verified as Authentic", record));
     }
 
     @Data

@@ -36,6 +36,15 @@ class SchoolErpApplicationTests {
     @Autowired
     private FinanceService financeService;
 
+    @Autowired
+    private com.schoolerp.modules.examinations.service.GradebookService gradebookService;
+
+    @Autowired
+    private com.schoolerp.modules.system.service.TenantModuleLicenseService licenseService;
+
+    @Autowired
+    private com.schoolerp.modules.students.repository.StudentRepository studentRepository;
+
     @BeforeEach
     void setUp() {
         TenantContext.setTenantId("tenant_apex_mumbai_01");
@@ -197,5 +206,63 @@ class SchoolErpApplicationTests {
         var bounced = financeService.updateChequeStatus(receivedCheque.getId(), "BOUNCED", "Insufficient funds (Return memo #9901)");
         assertEquals("BOUNCED", bounced.getStatus());
         assertEquals(0, new BigDecimal("500.00").compareTo(bounced.getBouncePenalty()));
+    }
+
+    @Test
+    void testReportCardCompilationAndQrVerification() {
+        var students = studentRepository.findAllByTenantId("tenant_apex_mumbai_01");
+        assertFalse(students.isEmpty(), "Students must be seeded");
+        var aarav = students.stream().filter(s -> s.getFullName().equals("Aarav Sharma")).findFirst().orElse(null);
+        assertNotNull(aarav);
+
+        // Compile CBSE 70/20/10 weighted report card
+        var reportCard = gradebookService.compileReportCard(aarav.getId(), "Term 1 Mid-Term");
+        assertNotNull(reportCard);
+        assertNotNull(reportCard.getVerificationHash(), "Cryptographic verification hash must be present");
+        assertEquals("Aarav Sharma", reportCard.getStudentName());
+        assertTrue(reportCard.getPercentage().compareTo(BigDecimal.valueOf(80.0)) >= 0);
+        assertTrue(reportCard.getCgpa().compareTo(BigDecimal.valueOf(8.0)) >= 0);
+        assertEquals(1, reportCard.getClassRank(), "Aarav should rank #1 in Section A");
+        assertEquals("DIGITALLY_SIGNED_SHA256", reportCard.getPrincipalSignatureStatus());
+
+        // Verify the report card using public hash
+        var verification = gradebookService.verifyReportCard(reportCard.getVerificationHash());
+        assertNotNull(verification);
+        assertEquals("AUTHENTIC_VALID", verification.getVerificationStatus());
+        assertEquals(aarav.getAdmissionNumber(), verification.getAdmissionNumber());
+    }
+
+    @Test
+    void testMobileDeviceTokenAndPushNotification() {
+        var devices = communicationService.getActiveDevices();
+        assertNotNull(devices);
+        assertTrue(devices.size() >= 1, "Should have seeded at least 1 parent mobile device token");
+
+        // Send high-priority mobile push
+        var pushLog = communicationService.sendPushNotification(
+                devices.get(0).getUserId(),
+                "Rajesh Sharma",
+                "Bus Approaching Stop",
+                "Tata Starbus #MH-02-CB-4012 is 3 minutes away from Lokhandwala Circle.",
+                "BUS_TRACKING"
+        );
+        assertNotNull(pushLog);
+        assertEquals("PUSH_NOTIFICATION_FCM", pushLog.getChannel());
+        assertTrue(pushLog.getProviderMessageId().startsWith("fcm_msg_"));
+    }
+
+    @Test
+    void testTenantDynamicModuleLicensing() {
+        var modules = licenseService.getTenantModules();
+        assertNotNull(modules);
+        assertEquals(9, modules.size(), "Should have seeded 9 enterprise modules");
+
+        // Toggle module license state
+        var toggled = licenseService.toggleModule("FLEET_GPS", false, "SUPER_ADMIN");
+        assertFalse(toggled.isEnabled(), "Module should be toggled to false");
+
+        // Restore to true
+        var restored = licenseService.toggleModule("FLEET_GPS", true, "SUPER_ADMIN");
+        assertTrue(restored.isEnabled(), "Module should be restored to true");
     }
 }

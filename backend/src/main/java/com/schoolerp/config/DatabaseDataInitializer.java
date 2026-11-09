@@ -31,6 +31,7 @@ import com.schoolerp.modules.students.repository.StudentDocumentRepository;
 import com.schoolerp.modules.students.repository.StudentRepository;
 import com.schoolerp.modules.system.entity.AuditLog;
 import com.schoolerp.modules.system.repository.AuditLogRepository;
+import com.schoolerp.modules.system.service.TenantModuleLicenseService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
@@ -42,6 +43,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 @Component
 @RequiredArgsConstructor
@@ -75,6 +77,8 @@ public class DatabaseDataInitializer implements CommandLineRunner {
     private final BookIssueRecordRepository bookIssueRecordRepository;
     private final CircularRepository circularRepository;
     private final NotificationDispatchLogRepository dispatchLogRepository;
+    private final DeviceTokenRepository deviceTokenRepository;
+    private final TenantModuleLicenseService tenantModuleLicenseService;
 
     @Override
     public void run(String... args) {
@@ -93,6 +97,9 @@ public class DatabaseDataInitializer implements CommandLineRunner {
                         .subscriptionTier("ENTERPRISE")
                         .studentCapacity(20000)
                         .build()));
+
+        // Provision Odoo-style Dynamic Tenant Module Licenses
+        tenantModuleLicenseService.seedDefaultModulesForTenant(tenantId);
 
         // 2. Seed Roles
         Role superAdminRole = roleRepository.findByName("SUPER_ADMIN")
@@ -761,6 +768,21 @@ public class DatabaseDataInitializer implements CommandLineRunner {
                     .messageBody("Reminder: Outstanding fee invoice INV-2026-0843 of INR 15,000.00 is due on Nov 15. Please pay online via parent portal.")
                     .providerMessageId("sms_msg_994812")
                     .deliveryStatus("DELIVERED")
+                    .build());
+        }
+
+        // 14. Seed Mobile Parent App Device Tokens
+        if (deviceTokenRepository.count() == 0) {
+            deviceTokenRepository.save(DeviceToken.builder()
+                    .tenantId(tenantId)
+                    .userId(UUID.randomUUID())
+                    .userEmail("rajesh.sharma@example.com")
+                    .userRole("PARENT")
+                    .deviceToken("fcm_token_samsung_s24_apex_9921_alpha_secret")
+                    .deviceType("ANDROID")
+                    .deviceModel("Samsung Galaxy S24 Ultra")
+                    .appVersion("1.0.0-parent-native")
+                    .status("ACTIVE")
                     .build());
         }
 

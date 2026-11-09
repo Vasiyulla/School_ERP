@@ -12,5 +12,8 @@ import java.util.UUID;
 public interface StudentMarkRepository extends JpaRepository<StudentMark, UUID> {
     List<StudentMark> findAllByTenantIdAndTermNameAndSubject(String tenantId, String termName, String subject);
     Optional<StudentMark> findByTenantIdAndTermNameAndStudentIdAndSubject(String tenantId, String termName, UUID studentId, String subject);
+    List<StudentMark> findAllByTenantIdAndStudentIdAndTermName(String tenantId, UUID studentId, String termName);
+    List<StudentMark> findAllByTenantIdAndTermName(String tenantId, String termName);
+    List<StudentMark> findAllByTenantIdAndStudentId(String tenantId, UUID studentId);
 }
 
