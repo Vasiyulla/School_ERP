@@ -50,3 +50,4 @@ public class DeviceToken {
     @Builder.Default
     private Instant createdAt = Instant.now();
 }
+

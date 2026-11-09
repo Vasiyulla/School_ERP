@@ -12,3 +12,4 @@ public interface ReportCardVerificationRepository extends JpaRepository<ReportCa
     Optional<ReportCardVerificationRecord> findByVerificationHash(String verificationHash);
     Optional<ReportCardVerificationRecord> findByTenantIdAndStudentIdAndTermName(String tenantId, UUID studentId, String termName);
 }
+

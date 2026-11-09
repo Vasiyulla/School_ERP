@@ -49,3 +49,4 @@ public class FeeStructure {
     @Builder.Default
     private Instant createdAt = Instant.now();
 }
+

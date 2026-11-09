@@ -31,3 +31,4 @@ public class FeeStructureItem {
     @Builder.Default
     private String frequency = "TERMLY"; // ANNUAL, TERMLY, MONTHLY
 }
+

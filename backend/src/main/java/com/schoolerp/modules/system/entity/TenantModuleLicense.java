@@ -43,3 +43,4 @@ public class TenantModuleLicense {
     @Builder.Default
     private Instant updatedAt = Instant.now();
 }
+

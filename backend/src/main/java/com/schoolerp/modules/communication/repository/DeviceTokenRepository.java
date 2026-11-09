@@ -15,3 +15,4 @@ public interface DeviceTokenRepository extends JpaRepository<DeviceToken, UUID> 
     List<DeviceToken> findByTenantIdAndUserRoleAndStatus(String tenantId, String userRole, String status);
     List<DeviceToken> findByTenantId(String tenantId);
 }
+

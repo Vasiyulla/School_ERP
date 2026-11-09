@@ -39,3 +39,4 @@ public class TenantModuleLicenseController {
         private boolean enabled;
     }
 }
+

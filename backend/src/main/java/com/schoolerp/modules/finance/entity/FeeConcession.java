@@ -55,3 +55,4 @@ public class FeeConcession {
     @Builder.Default
     private Instant createdAt = Instant.now();
 }
+

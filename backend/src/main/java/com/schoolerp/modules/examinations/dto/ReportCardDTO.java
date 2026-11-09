@@ -56,3 +56,4 @@ public class ReportCardDTO {
     private String principalSignatureStatus; // DIGITALLY_SIGNED_SHA256
     private Instant issuedAt;
 }
+

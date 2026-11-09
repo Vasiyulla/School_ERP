@@ -13,3 +13,4 @@ public interface TenantModuleLicenseRepository extends JpaRepository<TenantModul
     List<TenantModuleLicense> findByTenantId(String tenantId);
     Optional<TenantModuleLicense> findByTenantIdAndModuleKey(String tenantId, String moduleKey);
 }
+

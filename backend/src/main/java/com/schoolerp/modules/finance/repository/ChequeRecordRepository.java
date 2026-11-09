@@ -14,3 +14,4 @@ public interface ChequeRecordRepository extends JpaRepository<ChequeRecord, UUID
     List<ChequeRecord> findByTenantIdAndStatus(String tenantId, String status);
     Optional<ChequeRecord> findByTenantIdAndChequeNumber(String tenantId, String chequeNumber);
 }
+

@@ -77,3 +77,4 @@ public class TenantModuleLicenseService {
         log.info("Provisioned 9 enterprise dynamic module licenses for tenant {}", tenantId);
     }
 }
+

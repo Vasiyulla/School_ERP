@@ -14,3 +14,4 @@ public interface FeeConcessionRepository extends JpaRepository<FeeConcession, UU
     List<FeeConcession> findByTenantIdAndStudentId(String tenantId, UUID studentId);
     Optional<FeeConcession> findByTenantIdAndStudentIdAndStatus(String tenantId, UUID studentId, String status);
 }
+

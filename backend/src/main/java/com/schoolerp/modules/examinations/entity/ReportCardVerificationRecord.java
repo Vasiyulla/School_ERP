@@ -62,3 +62,4 @@ public class ReportCardVerificationRecord {
     @Builder.Default
     private Instant issuedAt = Instant.now();
 }
+

@@ -13,3 +13,4 @@ public interface FeeStructureRepository extends JpaRepository<FeeStructure, UUID
     List<FeeStructure> findByTenantId(String tenantId);
     Optional<FeeStructure> findByTenantIdAndGradeLevelAndAcademicYear(String tenantId, String gradeLevel, String academicYear);
 }
+

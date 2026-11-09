@@ -62,3 +62,4 @@ public class ChequeRecord {
     @Builder.Default
     private Instant receivedAt = Instant.now();
 }
+
