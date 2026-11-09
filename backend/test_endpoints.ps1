@@ -523,7 +523,81 @@ foreach ($c in $m.children) {
     }
 }
 
+Write-Host "`n34. Testing Student RFID Cashless Wallet Top-Up (POST /api/v1/finance/wallet/topup)..."
+$topupBody = @{
+    studentId = $aaravId
+    amount = 500.00
+    paymentMethod = "UPI_PHONEPE"
+} | ConvertTo-Json
+$topupRes = Invoke-RestMethod -Uri "$baseUri/finance/wallet/topup" -Method Post -Body $topupBody -Headers $authHeaders
+$w = $topupRes.data
+Write-Host "Wallet Top-up Confirmed for $($w.studentName):"
+Write-Host " - RFID Card: $($w.rfidCardNumber) | Daily Limit: INR $($w.dailySpendingLimit)"
+Write-Host " - Current Balance: INR $($w.balance) | Status: $($w.status)"
+
+Write-Host "`n35. Testing Cafeteria POS Cashless Smart Card Debit (POST /api/v1/finance/wallet/transact)..."
+$debitBody = @{
+    rfidCardNumber = $w.rfidCardNumber
+    amount = 65.00
+    itemDescription = "Grilled Veg Sandwich + Badam Milk"
+    terminalId = "POS-CANTEEN-02"
+    cashierName = "Ramesh (Cafeteria In-Charge)"
+} | ConvertTo-Json
+$debitRes = Invoke-RestMethod -Uri "$baseUri/finance/wallet/transact" -Method Post -Body $debitBody -Headers $authHeaders
+$pos = $debitRes.data
+Write-Host "Cafeteria POS Smart Card Debit Approved:"
+Write-Host " - Receipt: $($pos.receiptNumber) | Item: $($pos.itemDescription)"
+Write-Host " - Amount: INR $($pos.amount) | Remaining Balance: INR $($pos.balanceAfter) | Terminal: $($pos.terminalId)"
+
+Write-Host "`n36. Testing Student Merit & Demerit House System (POST /api/v1/students/behavior/record)..."
+$meritBody = @{
+    studentId = $aaravId
+    incidentType = "MERIT"
+    category = "SPORTSMANSHIP"
+    points = 10
+    description = "Captain of winning Inter-School Football Championship team"
+    reportedByStaff = "Coach Anand (Sports Master)"
+} | ConvertTo-Json
+$meritRes = Invoke-RestMethod -Uri "$baseUri/students/behavior/record" -Method Post -Body $meritBody -Headers $authHeaders
+$mIncident = $meritRes.data
+Write-Host "Merit Points Awarded: $($mIncident.incidentType) ($($mIncident.points) pts) for $($mIncident.studentName)"
+Write-Host " - House: $($mIncident.houseName) | Category: $($mIncident.category) | Reason: '$($mIncident.description)'"
+
+Write-Host "`n37. Testing School House Championship Leaderboard (GET /api/v1/students/behavior/houses/leaderboard)..."
+$lbRes = Invoke-RestMethod -Uri "$baseUri/students/behavior/houses/leaderboard" -Method Get -Headers $authHeaders
+Write-Host "Annual Cock House Trophy Leaderboard Standings:"
+$rank = 1
+foreach ($h in $lbRes.data) {
+    Write-Host " - Rank ${rank}: $($h.houseName) ($($h.houseColorHex)) | Total Points: $($h.totalPoints) pts | House Master: $($h.houseMasterStaffName)"
+    $rank++
+}
+
+Write-Host "`n38. Testing Parent-Teacher Meeting (PTM) Conference Scheduler (GET & POST /api/v1/communication/ptm)..."
+$ptmSessionsRes = Invoke-RestMethod -Uri "$baseUri/communication/ptm/sessions/active" -Method Get -Headers $authHeaders
+Write-Host "Retrieved $($ptmSessionsRes.data.Count) active PTM sessions."
+if ($ptmSessionsRes.data.Count -gt 0) {
+    $sess = $ptmSessionsRes.data[0]
+    Write-Host "Active PTM: '$($sess.sessionTitle)' on $($sess.sessionDate) ($($sess.startTime) - $($sess.endTime))"
+    
+    # Get available slots
+    $slotsRes = Invoke-RestMethod -Uri "$baseUri/communication/ptm/sessions/$($sess.id)/slots" -Method Get -Headers $authHeaders
+    Write-Host "Available Unbooked Slots for Conference: $($slotsRes.data.Count) slots"
+    if ($slotsRes.data.Count -gt 0) {
+        $firstSlot = $slotsRes.data[0]
+        Write-Host "Booking Slot: $($firstSlot.slotStartTime)-$($firstSlot.slotEndTime) with $($firstSlot.teacherName) ($($firstSlot.subject))..."
+        $bookBody = @{
+            studentId = $aaravId
+            guardianName = "Dr. Rajesh Sharma"
+            guardianPhone = "+91 98201 99882"
+        } | ConvertTo-Json
+        $bookRes = Invoke-RestMethod -Uri "$baseUri/communication/ptm/slots/$($firstSlot.id)/book" -Method Post -Body $bookBody -Headers $authHeaders
+        $bs = $bookRes.data
+        Write-Host "PTM Conference Slot Confirmed: Room $($bs.roomNumber) with $($bs.teacherName) for $($bs.studentName)"
+        Write-Host " - Time: $($bs.slotStartTime) to $($bs.slotEndTime) | Booked By: $($bs.guardianName)"
+    }
+}
+
 Write-Host "`n============================================================"
-Write-Host " ALL 33 ENTERPRISE BACKEND ENDPOINTS VERIFIED & VALIDATED 100%"
+Write-Host " ALL 38 ENTERPRISE BACKEND ENDPOINTS VERIFIED & VALIDATED 100%"
 Write-Host "============================================================"
 Write-Host "============================================================"

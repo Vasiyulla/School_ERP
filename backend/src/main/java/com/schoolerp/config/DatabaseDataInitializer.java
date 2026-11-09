@@ -90,6 +90,12 @@ public class DatabaseDataInitializer implements CommandLineRunner {
     private final com.schoolerp.modules.students.repository.InfirmaryVisitRepository infirmaryVisitRepository;
     private final com.schoolerp.modules.academics.service.HomeworkService homeworkService;
     private final com.schoolerp.modules.academics.repository.HomeworkAssignmentRepository homeworkAssignmentRepository;
+    private final com.schoolerp.modules.finance.service.StudentWalletService studentWalletService;
+    private final com.schoolerp.modules.finance.repository.StudentWalletRepository studentWalletRepository;
+    private final com.schoolerp.modules.students.service.BehaviorService behaviorService;
+    private final com.schoolerp.modules.students.repository.SchoolHouseRepository schoolHouseRepository;
+    private final com.schoolerp.modules.communication.service.PtmService ptmService;
+    private final com.schoolerp.modules.communication.repository.PtmSessionRepository ptmSessionRepository;
 
     @Override
     public void run(String... args) {
@@ -906,6 +912,66 @@ public class DatabaseDataInitializer implements CommandLineRunner {
                 var sub = homeworkService.submitHomework(hw.getId(), aarav.getId(), "https://cdn.apexacademy.edu.in/submissions/aarav_math_hw.pdf");
                 homeworkService.gradeSubmission(sub.getId(), 19.5, "Flawless discriminant derivation and quadratic formula application.", "Sunita Rao");
             }
+        }
+
+        // 20. Seed Student RFID Cashless Wallet
+        if (studentWalletRepository.count() == 0 && studentRepository.count() > 0) {
+            Student aarav = studentRepository.findAllByTenantId(tenantId).stream()
+                    .filter(s -> s.getFullName().contains("Aarav"))
+                    .findFirst()
+                    .orElse(null);
+
+            if (aarav != null) {
+                var wallet = studentWalletService.registerOrGetWallet(aarav.getId(), "RFID-ADM2024-8842", new BigDecimal("250.00"));
+                studentWalletService.topupWallet(aarav.getId(), new BigDecimal("1500.00"), "UPI/Razorpay");
+                studentWalletService.transactCanteen(wallet.getRfidCardNumber(), new BigDecimal("75.00"),
+                        "Deluxe Veg Thali + Fresh Orange Juice", "POS-CANTEEN-01", "Ramesh (Cafeteria)");
+            }
+        }
+
+        // 21. Seed School Houses & Merit/Demerit Incidents
+        if (schoolHouseRepository.count() == 0) {
+            schoolHouseRepository.save(com.schoolerp.modules.students.entity.SchoolHouse.builder()
+                    .tenantId(tenantId).houseName("Mars (Red)").houseColorHex("#EF4444")
+                    .houseMotto("Courage & Valor").houseMasterStaffName("Dr. Vikram Seth").totalPoints(150).build());
+
+            schoolHouseRepository.save(com.schoolerp.modules.students.entity.SchoolHouse.builder()
+                    .tenantId(tenantId).houseName("Neptune (Blue)").houseColorHex("#3B82F6")
+                    .houseMotto("Wisdom & Truth").houseMasterStaffName("Sunita Rao").totalPoints(180).build());
+
+            schoolHouseRepository.save(com.schoolerp.modules.students.entity.SchoolHouse.builder()
+                    .tenantId(tenantId).houseName("Terra (Green)").houseColorHex("#10B981")
+                    .houseMotto("Harmony & Growth").houseMasterStaffName("Meera Joshi").totalPoints(135).build());
+
+            schoolHouseRepository.save(com.schoolerp.modules.students.entity.SchoolHouse.builder()
+                    .tenantId(tenantId).houseName("Apollo (Yellow)").houseColorHex("#F59E0B")
+                    .houseMotto("Brilliance & Honor").houseMasterStaffName("Siddharth Rao").totalPoints(160).build());
+
+            Student aarav = studentRepository.findAllByTenantId(tenantId).stream()
+                    .filter(s -> s.getFullName().contains("Aarav"))
+                    .findFirst()
+                    .orElse(null);
+
+            if (aarav != null) {
+                behaviorService.recordBehaviorIncident(aarav.getId(), "MERIT", "ACADEMIC_EXCELLENCE", 15,
+                        "1st Place in Regional CBSE Science & Innovation Fair", "Dr. Vikram Seth");
+            }
+        }
+
+        // 22. Seed PTM Conference Sessions & Booking Slots
+        if (ptmSessionRepository.count() == 0 && employeeRepository.count() > 0) {
+            List<Employee> teachers = employeeRepository.findAllByTenantId(tenantId).stream()
+                    .filter(e -> e.getFullName().contains("Vikram") || e.getFullName().contains("Sunita"))
+                    .toList();
+
+            ptmService.createSessionAndGenerateSlots(
+                    "Term 1 Parent-Teacher Academic Conference",
+                    LocalDate.now().plusDays(5),
+                    java.time.LocalTime.of(9, 0),
+                    java.time.LocalTime.of(11, 0),
+                    15,
+                    teachers
+            );
         }
 
         log.info("Multi-tenant enterprise seed sequence completed successfully.");

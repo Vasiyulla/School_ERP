@@ -72,6 +72,15 @@ class SchoolErpApplicationTests {
     @Autowired
     private com.schoolerp.modules.staff.repository.EmployeeRepository employeeRepository;
 
+    @Autowired
+    private com.schoolerp.modules.finance.service.StudentWalletService studentWalletService;
+
+    @Autowired
+    private com.schoolerp.modules.students.service.BehaviorService behaviorService;
+
+    @Autowired
+    private com.schoolerp.modules.communication.service.PtmService ptmService;
+
     @BeforeEach
     void setUp() {
         TenantContext.setTenantId("tenant_apex_mumbai_01");
@@ -495,5 +504,71 @@ class SchoolErpApplicationTests {
         assertNotNull(firstChild.getFullName());
         assertNotNull(firstChild.getPendingFeeBalance());
         assertNotNull(firstChild.getGatePassStatus());
+    }
+
+    @Test
+    void testStudentRfidWalletTopupAndDailyLimit() {
+        var student = studentRepository.findAllByTenantId("tenant_apex_mumbai_01").get(0);
+        var wallet = studentWalletService.registerOrGetWallet(student.getId(), "RFID-TEST-9921", new BigDecimal("150.00"));
+        assertNotNull(wallet);
+
+        // Top-up
+        var toppedUp = studentWalletService.topupWallet(student.getId(), new BigDecimal("500.00"), "UPI");
+        assertTrue(toppedUp.getBalance().compareTo(new BigDecimal("500.00")) >= 0);
+
+        // Debit within limit (INR 80 <= INR 150 daily limit)
+        var tx = studentWalletService.transactCanteen(wallet.getRfidCardNumber(), new BigDecimal("80.00"),
+                "Fruit Salad + Sandwich", "POS-CANTEEN-01", "Cashier A");
+        assertNotNull(tx);
+        assertEquals("DEBIT_CANTEEN", tx.getTransactionType());
+
+        // Attempt debit exceeding daily limit (Attempting INR 100 more, but limit is 150 and already spent 80)
+        assertThrows(IllegalStateException.class, () -> {
+            studentWalletService.transactCanteen(wallet.getRfidCardNumber(), new BigDecimal("100.00"),
+                    "Extra Snack", "POS-CANTEEN-01", "Cashier A");
+        }, "Must decline transaction exceeding daily spending cap");
+    }
+
+    @Test
+    void testSchoolHouseMeritDemeritLeaderboard() {
+        var student = studentRepository.findAllByTenantId("tenant_apex_mumbai_01").get(0);
+
+        var merit = behaviorService.recordBehaviorIncident(student.getId(), "MERIT", "SPORTSMANSHIP", 10,
+                "Inter-school relay race silver medal", "Sports Coach");
+        assertNotNull(merit);
+        assertEquals("MERIT", merit.getIncidentType());
+        assertEquals(10, merit.getPoints());
+
+        var demerit = behaviorService.recordBehaviorIncident(student.getId(), "DEMERIT", "TARDINESS", 5,
+                "Late reporting to assembly", "Discipline Head");
+        assertNotNull(demerit);
+        assertEquals("DEMERIT", demerit.getIncidentType());
+        assertEquals(-5, demerit.getPoints());
+
+        var leaderboard = behaviorService.getHouseLeaderboard();
+        assertFalse(leaderboard.isEmpty(), "House leaderboard must return houses sorted by points");
+        assertTrue(leaderboard.get(0).getTotalPoints() >= leaderboard.get(leaderboard.size() - 1).getTotalPoints());
+    }
+
+    @Test
+    void testPtmConferenceSlotBooking() {
+        var sessions = ptmService.getActiveSessions();
+        assertFalse(sessions.isEmpty(), "Active PTM session must exist from seed");
+        var session = sessions.get(0);
+
+        var availableSlots = ptmService.getAvailableSlots(session.getId(), null);
+        assertFalse(availableSlots.isEmpty(), "Unbooked conference slots must be available");
+        var slotToBook = availableSlots.get(0);
+
+        var student = studentRepository.findAllByTenantId("tenant_apex_mumbai_01").get(0);
+        var bookedSlot = ptmService.bookSlot(slotToBook.getId(), student.getId(), "Mrs. Sunita Sharma", "+91 98201 12345");
+        assertNotNull(bookedSlot);
+        assertTrue(bookedSlot.isBooked());
+        assertEquals(student.getId(), bookedSlot.getStudentId());
+
+        // Second booking attempt on same slot must fail with collision exception
+        assertThrows(IllegalStateException.class, () -> {
+            ptmService.bookSlot(slotToBook.getId(), student.getId(), "Another Parent", "+91 98201 99999");
+        }, "Double booking same PTM slot must be strictly prevented");
     }
 }

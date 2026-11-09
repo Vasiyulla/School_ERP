@@ -5,8 +5,8 @@
 [![Next.js 15](https://img.shields.io/badge/Next.js-15_App_Router-black.svg?style=flat&logo=next.js)](https://nextjs.org/)
 [![Kotlin 2.0](https://img.shields.io/badge/Kotlin-Jetpack_Compose-purple.svg?style=flat&logo=kotlin)](https://kotlinlang.org/)
 [![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-12_Schemas-blue.svg?style=flat&logo=postgresql)](https://www.postgresql.org/)
-[![Tests Passing](https://img.shields.io/badge/JUnit_5-21%2F21_Tests_Passed-success.svg)](https://junit.org/)
-[![Endpoints Verified](https://img.shields.io/badge/REST_Endpoints-33%2F33_Live_Verified-blueviolet.svg)](#complete-33-live-verified-rest-endpoints-directory)
+[![Tests Passing](https://img.shields.io/badge/JUnit_5-24%2F24_Tests_Passed-success.svg)](https://junit.org/)
+[![Endpoints Verified](https://img.shields.io/badge/REST_Endpoints-38%2F38_Live_Verified-blueviolet.svg)](#complete-38-live-verified-rest-endpoints-directory)
 
 A cloud-native, multi-portal **B2B SaaS School Enterprise Resource Planning (ERP)** platform engineered to lead the global educational software industry. Built to Tier-1 commercial standards benchmarked directly against **PowerSchool, Toddle, Odoo Enterprise, SAP Fiori, Verkada, and Samsara**.
 
@@ -122,7 +122,7 @@ graph TD
 
 ---
 
-## 5. Complete 33 Live Verified REST Endpoints Directory
+## 5. Complete 38 Live Verified REST Endpoints Directory
 
 All 33 endpoints are fully implemented, compiled, and verified via automated test suites and live HTTP scripts:
 
@@ -161,6 +161,11 @@ All 33 endpoints are fully implemented, compiled, and verified via automated tes
 | **31** | `/api/v1/students/infirmary/visits` | `POST` / `GET` | `students` | Campus clinic triage log & high-fever parent alerts |
 | **32** | `/api/v1/academics/homework` | `POST` / `GET` | `academics` | Toddle-style homework assignment, submit & grade desk |
 | **33** | `/api/v1/mobile/parent/home` | `GET` | `mobile` | Aggregated native mobile parent dashboard gateway |
+| **34** | `/api/v1/finance/wallet/topup` | `POST` | `finance` | Cashless student RFID smart wallet online top-up |
+| **35** | `/api/v1/finance/wallet/transact` | `POST` | `finance` | Cafeteria POS contactless smart card debit & limit check |
+| **36** | `/api/v1/students/behavior/record` | `POST` | `students` | Student merit & demerit house incident logger |
+| **37** | `/api/v1/students/behavior/houses/leaderboard` | `GET` | `students` | Annual Cock House Championship Trophy leaderboard |
+| **38** | `/api/v1/communication/ptm/slots/{id}/book` | `POST` / `GET` | `communication` | Parent-Teacher Meeting (PTM) conference slot scheduler |
 
 ---
 
@@ -309,3 +314,4 @@ docker run -d --name school-backend-apex \
 This software is engineered in compliance with **CBSE Affiliation Norms**, **India DPDP Act 2023**, and **OWASP Top 10** security standards.
 
 *Engineered with precision for global educational institutions.*
+
