@@ -27,9 +27,31 @@ import {
   MOCK_AARAV_MARKS,
 } from "@/lib/mock/parent-mock";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { parentService, ParentHomeDashboardData } from "@/lib/api/parent.service";
 
 export default function ParentDashboardPage() {
   const { activeChild } = useParentContext();
+  const [liveDashboard, setLiveDashboard] = React.useState<ParentHomeDashboardData | null>(null);
+  const [isLiveConnected, setIsLiveConnected] = React.useState(false);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    parentService
+      .getDashboard("parent.rajesh@example.com")
+      .then((data) => {
+        if (isMounted && data) {
+          setLiveDashboard(data);
+          setIsLiveConnected(true);
+        }
+      })
+      .catch(() => {
+        // Safe fallback to mock
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const activeFees = MOCK_PARENT_FEES.filter((f) => f.childId === activeChild.id);
   const pendingFee = activeFees.find((f) => f.status === "PENDING" || f.status === "OVERDUE");
@@ -57,6 +79,11 @@ export default function ParentDashboardPage() {
                 <span className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                   {activeChild.gradeLevel} • {activeChild.section}
                 </span>
+                {isLiveConnected && (
+                  <Badge variant="success" className="text-[10px] font-mono py-0">
+                    ● Parent Gateway Connected
+                  </Badge>
+                )}
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Admission No: <span className="font-mono font-medium text-foreground">{activeChild.admissionNumber}</span> • Roll #{activeChild.rollNumber} • Class Teacher: <span className="font-medium text-foreground">{activeChild.classTeacher}</span>

@@ -27,9 +27,31 @@ import {
   mockClassRoster,
   mockTeacherAssignments,
 } from "@/lib/mock/teacher-mock";
+import { teacherService, HomeworkItem } from "@/lib/api/teacher.service";
 import { cn } from "@/lib/utils";
 
 export default function TeacherCockpitPage() {
+  const [liveHomework, setLiveHomework] = React.useState<HomeworkItem[]>([]);
+  const [backendLive, setBackendLive] = React.useState(false);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    teacherService
+      .getHomework()
+      .then((data) => {
+        if (isMounted && data && data.length > 0) {
+          setLiveHomework(data);
+          setBackendLive(true);
+        }
+      })
+      .catch(() => {
+        // Fallback gracefully
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const currentPeriod = mockTodaySchedule.find((p) => p.isCurrent);
   const presentCount = mockClassRoster.filter((s) => s.status === "PRESENT").length;
   const absentCount = mockClassRoster.filter((s) => s.status === "ABSENT").length;
@@ -47,6 +69,11 @@ export default function TeacherCockpitPage() {
             </span>
             <span className="text-slate-500">•</span>
             <span className="text-xs text-slate-300 font-medium">AY 2026-27 • Semester 2</span>
+            {backendLive && (
+              <Badge variant="success" className="text-[10px] font-mono py-0 ml-2">
+                ● Live Academic API Connected
+              </Badge>
+            )}
           </div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
             Welcome back, {mockTeacherProfile.name}

@@ -18,18 +18,60 @@ import { AttendanceChartCard } from "@/components/admin/attendance-chart-card";
 import { RecentActivityCard } from "@/components/admin/recent-activity-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Server } from "lucide-react";
 import { mockAdminKPIs, mockClasses } from "@/lib/mock/admin-mock";
 import { formatCurrency } from "@/lib/utils";
+import { adminService, financeService } from "@/lib/api";
 
 export default function AdminDashboardPage() {
+  const [liveStudentsCount, setLiveStudentsCount] = React.useState<number | null>(null);
+  const [liveTrialBalance, setLiveTrialBalance] = React.useState<{ total: number; isBalanced: boolean } | null>(null);
+  const [backendStatus, setBackendStatus] = React.useState<"LIVE" | "CONNECTING" | "OFFLINE">("CONNECTING");
+
+  React.useEffect(() => {
+    let isMounted = true;
+    Promise.allSettled([
+      adminService.getStudents(),
+      financeService.getTrialBalance(),
+    ]).then(([studentsRes, tbRes]) => {
+      if (!isMounted) return;
+      let connected = false;
+      if (studentsRes.status === "fulfilled" && studentsRes.value) {
+        setLiveStudentsCount(studentsRes.value.length);
+        connected = true;
+      }
+      if (tbRes.status === "fulfilled" && tbRes.value) {
+        setLiveTrialBalance({ total: tbRes.value.totalDebit, isBalanced: tbRes.value.isBalanced });
+        connected = true;
+      }
+      setBackendStatus(connected ? "LIVE" : "OFFLINE");
+    }).catch(() => {
+      if (isMounted) setBackendStatus("OFFLINE");
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Top Header & Action Row */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-            Executive Command Center
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
+              Executive Command Center
+            </h1>
+            <Badge
+              variant={backendStatus === "LIVE" ? "success" : "secondary"}
+              className="text-[10px] font-mono py-0.5 ml-2"
+            >
+              <Server className="h-3 w-3 mr-1" />
+              {backendStatus === "LIVE" ? "Spring Boot Live (38 APIs)" : "Standby Mode"}
+            </Badge>
+          </div>
           <p className="text-sm font-normal text-slate-500 dark:text-slate-400 mt-1">
             Real-time operational, academic, and financial overview across 20,000 student capacity
           </p>

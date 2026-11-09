@@ -20,7 +20,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+import { authService } from "@/lib/api/auth.service";
+import { authStorage } from "@/lib/auth-storage";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -33,10 +34,10 @@ export default function LoginPage() {
 
   // Check health on load
   React.useEffect(() => {
-    fetch(`${API_BASE_URL}/api/v1/auth/health`)
-      .then((res) => res.json())
+    authService
+      .checkHealth()
       .then((data) => {
-        if (data.success) {
+        if (data.status === "UP" || (data as any).success) {
           setBackendStatus("CONNECTED");
         } else {
           setBackendStatus("OFFLINE");
@@ -51,30 +52,10 @@ export default function LoginPage() {
     setErrorMsg(null);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Tenant-ID": tenantId,
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const json = await res.json();
-
-      if (!res.ok || !json.success) {
-        throw new Error(json.message || "Authentication failed");
-      }
-
-      // Store JWT token and tenant context
-      if (typeof window !== "undefined") {
-        localStorage.setItem("schoolerp_token", json.data.token);
-        localStorage.setItem("schoolerp_user", JSON.stringify(json.data.user));
-        localStorage.setItem("schoolerp_tenant", JSON.stringify(json.data.tenant));
-      }
+      const data = await authService.login(email, password, tenantId);
 
       // Route based on role
-      const roles: string[] = json.data.user.roles || [];
+      const roles: string[] = data.user.roles || [];
       if (roles.includes("TEACHER")) {
         router.push("/teacher");
       } else if (roles.includes("PARENT") || email.includes("parent") || email.includes("sharma")) {

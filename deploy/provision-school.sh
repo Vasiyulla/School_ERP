@@ -75,3 +75,4 @@ echo "================================================================="
 echo " POD PROVISIONING COMPLETE: $SCHOOL_NAME ($SCHOOL_CODE)"
 echo " URL: http://${SCHOOL_CODE}.schoolerp.cloud:$PORT"
 echo "================================================================="
+
