@@ -189,6 +189,48 @@ Write-Host "Webhook Replay Delivery #2: Status: $($whRes2.data.status), Message:
 $whLogsRes = Invoke-RestMethod -Uri "$baseUri/finance/webhooks" -Method Get -Headers $authHeaders
 Write-Host "Retrieved $($whLogsRes.data.Count) recorded webhook events in audit register."
 
+Write-Host "`n13. Testing Dynamic Fee Structures by Grade Level (GET /api/v1/finance/structures)..."
+$structuresRes = Invoke-RestMethod -Uri "$baseUri/finance/structures" -Method Get -Headers $authHeaders
+Write-Host "Retrieved $($structuresRes.data.Count) active fee structures:"
+foreach ($str in $structuresRes.data) {
+    Write-Host " - Grade: $($str.gradeLevel) | Academic Year: $($str.academicYear) | Total: INR $($str.totalAmount) | Items: $($str.items.Count)"
+}
+
+Write-Host "`n14. Testing Sibling & Scholarship Concessions (GET /api/v1/finance/concessions)..."
+$concessionsRes = Invoke-RestMethod -Uri "$baseUri/finance/concessions" -Method Get -Headers $authHeaders
+Write-Host "Retrieved $($concessionsRes.data.Count) approved fee concessions:"
+foreach ($cn in $concessionsRes.data) {
+    Write-Host " - Student: $($cn.studentName) | Concession: $($cn.concessionType) ($($cn.percentageDiscount)%) | Reason: $($cn.reason)"
+}
+
+if ($concessionsRes.data.Count -gt 0) {
+    $rheaCon = $concessionsRes.data[0]
+    Write-Host "Calculating Net Fee for student $($rheaCon.studentName) on INR 26,000 tuition fee..."
+    $calcRes = Invoke-RestMethod -Uri "$baseUri/finance/concessions/calculate?studentId=$($rheaCon.studentId)&grossAmount=26000" -Method Get -Headers $authHeaders
+    Write-Host " - Gross Fee: INR $($calcRes.data.grossFee)"
+    Write-Host " - Sibling Discount ($($calcRes.data.discountPercentage)%): INR $($calcRes.data.discountAmount)"
+    Write-Host " - Net Payable: INR $($calcRes.data.netFee)"
+}
+
+Write-Host "`n15. Testing Cheque / DD Clearance Lifecycle (GET /api/v1/finance/cheques)..."
+$chequesRes = Invoke-RestMethod -Uri "$baseUri/finance/cheques" -Method Get -Headers $authHeaders
+Write-Host "Retrieved $($chequesRes.data.Count) cheque custody records:"
+foreach ($ch in $chequesRes.data) {
+    Write-Host " - Cheque #$($ch.chequeNumber) | Bank: $($ch.bankName) | Amount: INR $($ch.amount) | Payer: $($ch.payerName) | Status: $($ch.status) | Bounce Penalty: INR $($ch.bouncePenalty)"
+}
+
+Write-Host "`n16. Testing Automated Late Fee Surcharge Calculator (GET /api/v1/finance/invoices/{id}/surcharge)..."
+$invoicesRes = Invoke-RestMethod -Uri "$baseUri/finance/invoices" -Method Get -Headers $authHeaders
+if ($invoicesRes.data.Count -gt 0) {
+    $testInv = $invoicesRes.data[0]
+    $surchargeRes = Invoke-RestMethod -Uri "$baseUri/finance/invoices/$($testInv.id)/surcharge" -Method Get -Headers $authHeaders
+    Write-Host " - Invoice: $($surchargeRes.data.invoiceNumber)"
+    Write-Host " - Days Overdue: $($surchargeRes.data.daysOverdue)"
+    Write-Host " - Daily Surcharge Rate: INR $($surchargeRes.data.dailyRate)"
+    Write-Host " - Total Accrued Surcharge: INR $($surchargeRes.data.totalSurcharge)"
+    Write-Host " - Is Surcharge Applicable: $($surchargeRes.data.isSurchargeApplicable)"
+}
+
 Write-Host "`n============================================================"
 Write-Host " ALL ENTERPRISE BACKEND ENDPOINTS VERIFIED & VALIDATED 100%"
 Write-Host "============================================================"

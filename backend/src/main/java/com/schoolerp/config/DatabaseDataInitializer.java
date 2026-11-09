@@ -9,10 +9,8 @@ import com.schoolerp.modules.admissions.repository.AdmissionRepository;
 import com.schoolerp.modules.examinations.entity.StudentMark;
 import com.schoolerp.modules.examinations.repository.StudentMarkRepository;
 import com.schoolerp.modules.examinations.service.GradebookService;
-import com.schoolerp.modules.finance.entity.FeeInvoice;
-import com.schoolerp.modules.finance.entity.FinancialLedgerEntry;
-import com.schoolerp.modules.finance.repository.FeeInvoiceRepository;
-import com.schoolerp.modules.finance.repository.FinancialLedgerEntryRepository;
+import com.schoolerp.modules.finance.entity.*;
+import com.schoolerp.modules.finance.repository.*;
 import com.schoolerp.modules.communication.entity.*;
 import com.schoolerp.modules.communication.repository.*;
 import com.schoolerp.modules.identity.entity.Role;
@@ -63,6 +61,9 @@ public class DatabaseDataInitializer implements CommandLineRunner {
     private final StudentMarkRepository markRepository;
     private final FeeInvoiceRepository invoiceRepository;
     private final FinancialLedgerEntryRepository ledgerRepository;
+    private final FeeStructureRepository feeStructureRepository;
+    private final FeeConcessionRepository feeConcessionRepository;
+    private final ChequeRecordRepository chequeRecordRepository;
     private final AuditLogRepository auditLogRepository;
 
     private final EmployeeRepository employeeRepository;
@@ -253,6 +254,24 @@ public class DatabaseDataInitializer implements CommandLineRunner {
                     .balanceAmount(15000.0)
                     .build());
 
+            Student rhea = studentRepository.save(Student.builder()
+                    .tenantId(tenantId)
+                    .admissionNumber("ADM-2025-0318")
+                    .fullName("Rhea Sharma")
+                    .gender("Female")
+                    .dateOfBirth(LocalDate.of(2014, 5, 14))
+                    .className("Class 6")
+                    .sectionName("Section B")
+                    .rollNumber(14)
+                    .guardianName("Rajesh Sharma")
+                    .guardianPhone("+91 98765 43210")
+                    .guardianEmail("rajesh.sharma@example.com")
+                    .lockerIndex("Locker C-08")
+                    .attendancePercentage(98.0)
+                    .feeStatus("Paid")
+                    .balanceAmount(0.0)
+                    .build());
+
             // Physical Document Custody records
             documentRepository.save(StudentDocument.builder()
                     .tenantId(tenantId)
@@ -359,6 +378,94 @@ public class DatabaseDataInitializer implements CommandLineRunner {
                     .referenceId(inv1.getInvoiceNumber())
                     .postedAt(Instant.now())
                     .build());
+
+            // Seed Fee Structures (Class 10 and Class 6)
+            if (feeStructureRepository.count() == 0) {
+                FeeStructure class10Structure = FeeStructure.builder()
+                        .tenantId(tenantId)
+                        .structureName("Class 10 Standard Annual Fee Structure 2026-27")
+                        .gradeLevel("Class 10")
+                        .academicYear("2026-27")
+                        .totalAmount(new BigDecimal("45000.00"))
+                        .status("ACTIVE")
+                        .items(List.of(
+                                FeeStructureItem.builder().categoryName("TUITION").amount(new BigDecimal("30000.00")).isOptional(false).frequency("TERMLY").build(),
+                                FeeStructureItem.builder().categoryName("SCIENCE_LAB").amount(new BigDecimal("5000.00")).isOptional(false).frequency("TERMLY").build(),
+                                FeeStructureItem.builder().categoryName("COMPUTER_LAB").amount(new BigDecimal("4000.00")).isOptional(false).frequency("TERMLY").build(),
+                                FeeStructureItem.builder().categoryName("TRANSPORT").amount(new BigDecimal("6000.00")).isOptional(true).frequency("TERMLY").build()
+                        ))
+                        .build();
+                feeStructureRepository.save(class10Structure);
+
+                FeeStructure class6Structure = FeeStructure.builder()
+                        .tenantId(tenantId)
+                        .structureName("Class 6 Standard Annual Fee Structure 2026-27")
+                        .gradeLevel("Class 6")
+                        .academicYear("2026-27")
+                        .totalAmount(new BigDecimal("38000.00"))
+                        .status("ACTIVE")
+                        .items(List.of(
+                                FeeStructureItem.builder().categoryName("TUITION").amount(new BigDecimal("26000.00")).isOptional(false).frequency("TERMLY").build(),
+                                FeeStructureItem.builder().categoryName("COMPUTER_LAB").amount(new BigDecimal("4000.00")).isOptional(false).frequency("TERMLY").build(),
+                                FeeStructureItem.builder().categoryName("SPORTS_LIBRARY").amount(new BigDecimal("2000.00")).isOptional(false).frequency("TERMLY").build(),
+                                FeeStructureItem.builder().categoryName("TRANSPORT").amount(new BigDecimal("6000.00")).isOptional(true).frequency("TERMLY").build()
+                        ))
+                        .build();
+                feeStructureRepository.save(class6Structure);
+            }
+
+            // Seed Sibling Concession for Rhea Sharma (15% discount on Tuition fee)
+            if (feeConcessionRepository.count() == 0) {
+                feeConcessionRepository.save(FeeConcession.builder()
+                        .tenantId(tenantId)
+                        .studentId(rhea.getId())
+                        .studentName("Rhea Sharma")
+                        .concessionType("SIBLING_DISCOUNT")
+                        .percentageDiscount(new BigDecimal("15.00"))
+                        .flatDiscountAmount(BigDecimal.ZERO)
+                        .applicableFeeHead("TUITION")
+                        .reason("2nd child sibling concession (Elder sibling: Aarav Sharma ADM-2024-0012)")
+                        .approvedBy("Executive Trustee (Dr. Rajesh Sharma)")
+                        .status("ACTIVE")
+                        .build());
+            }
+
+            // Seed Cheque Records
+            if (chequeRecordRepository.count() == 0) {
+                chequeRecordRepository.save(ChequeRecord.builder()
+                        .tenantId(tenantId)
+                        .chequeNumber("CHQ-448201")
+                        .bankName("HDFC Bank")
+                        .branchName("Bandra West, Mumbai")
+                        .chequeDate(LocalDate.of(2026, 11, 2))
+                        .amount(new BigDecimal("45000.00"))
+                        .payerName("Rajesh Sharma")
+                        .studentId(aarav.getId())
+                        .invoiceNumber("INV-2026-0842")
+                        .status("CLEARED")
+                        .depositedDate(LocalDate.of(2026, 11, 3))
+                        .clearedDate(LocalDate.of(2026, 11, 5))
+                        .bouncePenalty(BigDecimal.ZERO)
+                        .remarks("Term 1 full tuition clearance")
+                        .build());
+
+                chequeRecordRepository.save(ChequeRecord.builder()
+                        .tenantId(tenantId)
+                        .chequeNumber("CHQ-991204")
+                        .bankName("State Bank of India")
+                        .branchName("Andheri East, Mumbai")
+                        .chequeDate(LocalDate.of(2026, 11, 7))
+                        .amount(new BigDecimal("15000.00"))
+                        .payerName("Alok Verma")
+                        .studentId(ishaan.getId())
+                        .invoiceNumber("INV-2026-0843")
+                        .status("RECEIVED")
+                        .depositedDate(null)
+                        .clearedDate(null)
+                        .bouncePenalty(BigDecimal.ZERO)
+                        .remarks("Term 1 balance installment cheque under processing")
+                        .build());
+            }
         }
 
         // 8. Seed Admissions Pipeline

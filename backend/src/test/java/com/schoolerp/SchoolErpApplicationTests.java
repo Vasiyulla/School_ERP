@@ -155,4 +155,47 @@ class SchoolErpApplicationTests {
         assertEquals("DUPLICATE_IGNORED", replayResult.getStatus());
         assertTrue(replayResult.isDuplicate(), "Replay webhook should be marked duplicate and safely ignored");
     }
+
+    @Test
+    void testFeeStructuresAndConcessions() {
+        var structures = financeService.getFeeStructures();
+        assertNotNull(structures);
+        assertTrue(structures.size() >= 2, "Should have seeded at least 2 fee structures");
+        assertTrue(structures.stream().anyMatch(s -> s.getGradeLevel().equals("Class 10")));
+
+        var concessions = financeService.getConcessions();
+        assertNotNull(concessions);
+        assertTrue(concessions.size() >= 1, "Should have seeded at least 1 sibling concession");
+        var rheaConcession = concessions.stream()
+                .filter(c -> c.getStudentName().equals("Rhea Sharma"))
+                .findFirst()
+                .orElse(null);
+        assertNotNull(rheaConcession);
+        assertEquals("SIBLING_DISCOUNT", rheaConcession.getConcessionType());
+        assertEquals(0, new BigDecimal("15.00").compareTo(rheaConcession.getPercentageDiscount()));
+
+        // Calculate net fee for Rhea on gross tuition of ₹26,000 (15% discount = ₹3,900 => Net ₹22,100)
+        var netResult = financeService.calculateNetFee(rheaConcession.getStudentId(), new BigDecimal("26000.00"));
+        assertNotNull(netResult);
+        assertEquals(0, new BigDecimal("3900.00").compareTo(netResult.getDiscountAmount()));
+        assertEquals(0, new BigDecimal("22100.00").compareTo(netResult.getNetFee()));
+    }
+
+    @Test
+    void testChequeClearanceAndBounceLifecycle() {
+        var cheques = financeService.getChequeRecords();
+        assertNotNull(cheques);
+        assertTrue(cheques.size() >= 2, "Should have seeded at least 2 cheque records");
+
+        // Find the RECEIVED cheque and test status change to BOUNCED
+        var receivedCheque = cheques.stream()
+                .filter(c -> "RECEIVED".equalsIgnoreCase(c.getStatus()))
+                .findFirst()
+                .orElse(null);
+        assertNotNull(receivedCheque);
+
+        var bounced = financeService.updateChequeStatus(receivedCheque.getId(), "BOUNCED", "Insufficient funds (Return memo #9901)");
+        assertEquals("BOUNCED", bounced.getStatus());
+        assertEquals(0, new BigDecimal("500.00").compareTo(bounced.getBouncePenalty()));
+    }
 }
