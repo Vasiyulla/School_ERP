@@ -1,0 +1,16 @@
+-- Baseline V1 Migration: Dedicated School Pod 12-Schema Logical Isolation
+-- Target: PostgreSQL 16 (Production AWS RDS Multi-AZ)
+
+CREATE SCHEMA IF NOT EXISTS identity;
+CREATE SCHEMA IF NOT EXISTS institution;
+CREATE SCHEMA IF NOT EXISTS admissions;
+CREATE SCHEMA IF NOT EXISTS students;
+CREATE SCHEMA IF NOT EXISTS academics;
+CREATE SCHEMA IF NOT EXISTS staff;
+CREATE SCHEMA IF NOT EXISTS attendance;
+CREATE SCHEMA IF NOT EXISTS examinations;
+CREATE SCHEMA IF NOT EXISTS finance;
+CREATE SCHEMA IF NOT EXISTS communication;
+CREATE SCHEMA IF NOT EXISTS operations;
+CREATE SCHEMA IF NOT EXISTS system;
+

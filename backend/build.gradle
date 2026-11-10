@@ -40,6 +40,11 @@ dependencies {
     // Argon2id Password Hashing
     implementation 'org.bouncycastle:bcprov-jdk18on:1.78.1'
 
+    // OpenAPI 3 Interactive Swagger UI & Flyway Versioned Migrations
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
+    implementation 'org.flywaydb:flyway-core'
+    runtimeOnly 'org.flywaydb:flyway-database-postgresql'
+
     // Database Drivers
     runtimeOnly 'com.h2database:h2' // In-memory dev database with PostgreSQL compatibility
     runtimeOnly 'org.postgresql:postgresql' // Production PostgreSQL driver

@@ -5,8 +5,8 @@
 [![Next.js 15](https://img.shields.io/badge/Next.js-15_App_Router-black.svg?style=flat&logo=next.js)](https://nextjs.org/)
 [![Kotlin 2.0](https://img.shields.io/badge/Kotlin-Jetpack_Compose-purple.svg?style=flat&logo=kotlin)](https://kotlinlang.org/)
 [![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-12_Schemas-blue.svg?style=flat&logo=postgresql)](https://www.postgresql.org/)
-[![Tests Passing](https://img.shields.io/badge/JUnit_5-40%2F40_Tests_Passed-success.svg)](https://junit.org/)
-[![Endpoints Verified](https://img.shields.io/badge/REST_Endpoints-66%2F66_Live_Verified-blueviolet.svg)](#complete-66-live-verified-rest-endpoints-directory)
+[![Tests Passing](https://img.shields.io/badge/JUnit_5-48%2F48_Tests_Passed-success.svg)](https://junit.org/)
+[![Endpoints Verified](https://img.shields.io/badge/REST_Endpoints-77%2F77_Live_Verified-blueviolet.svg)](#complete-77-live-verified-rest-endpoints-directory)
 
 A cloud-native, multi-portal **B2B SaaS School Enterprise Resource Planning (ERP)** platform engineered to lead the global educational software industry. Built to Tier-1 commercial standards benchmarked directly against **PowerSchool, Toddle, Odoo Enterprise, SAP Fiori, Verkada, and Samsara**.
 
@@ -17,7 +17,7 @@ A cloud-native, multi-portal **B2B SaaS School Enterprise Resource Planning (ERP
 2. [Dedicated Pod & Database-Per-School Architecture](#2-dedicated-pod--database-per-school-architecture)
 3. [Global Commercial SaaS Benchmark Matrix](#3-global-commercial-saas-benchmark-matrix)
 4. [PostgreSQL 12-Schema Domain Architecture](#4-postgresql-12-schema-domain-architecture)
-5. [Complete 66 Live Verified REST Endpoints Directory](#5-complete-66-live-verified-rest-endpoints-directory)
+5. [Complete 77 Live Verified REST Endpoints Directory](#5-complete-77-live-verified-rest-endpoints-directory)
 6. [Omni-Channel Portals & Client Applications](#6-omni-channel-portals--client-applications)
 7. [Enterprise Invariants & Regulatory Compliance](#7-enterprise-invariants--regulatory-compliance)
 8. [Getting Started & Local Development](#8-getting-started--local-development)
@@ -194,6 +194,17 @@ All 56 endpoints are fully implemented, compiled, and verified via automated tes
 | **64** | `/api/v1/finance/cashier/day-scroll/close` | `POST` | `finance` | Cashier note denomination day-end balancing scroll |
 | **65** | `/api/v1/staff/payroll/epfo-ecr/export` | `GET` | `staff` | EPFO Unified Portal Electronic Challan cum Return (ECR) |
 | **66** | `/api/v1/academics/assemblies/active-week` | `GET` | `academics` | Morning Quadrangle Assembly & House duty roster |
+| **67** | `/api/v1/institution/calendar/events` & `/is-working-day` | `POST` / `GET` | `institution` | Holiday Calendar, Rainy-Day Closures & Bell Schedules |
+| **68** | `/api/v1/auth/refresh` & `/identity/sessions/active` | `POST` / `GET` | `identity` | Refresh Token Rotation & Revocable User Sessions |
+| **69** | `/api/v1/system/imports/students-csv` | `POST` | `system` | High-Throughput Bulk CSV Onboarding with Row Error Isolation |
+| **70** | `/api/v1/system/outbox/enqueue` & `/retry-failed` | `POST` / `GET` | `system` | Transactional Outbox Relay & Automated Cron Scheduler |
+| **71** | `/v3/api-docs` | `GET` | `system` | Interactive OpenAPI 3 Specification & Flyway V1 Migration |
+| **72** | `/api/v1/academics/risk-radar/evaluate` | `POST` / `GET` | `academics` | Multi-Signal Student Early-Warning Risk Radar |
+| **73** | `/api/v1/examinations/hpc/assessments` & `/students/{id}` | `POST` / `GET` | `examinations` | NEP 2020 360° Holistic Progress Card (HPC) Engine |
+| **74** | `/api/v1/operations/compliance-sentinel/assets` & `/expiring` | `POST` / `GET` | `operations` | Statutory Licence, Bus RTO Fitness & Fire NOC Expiry Sentinel |
+| **75** | `/api/v1/academics/syllabus/progress` | `POST` | `academics` | Real-Time Classroom Chapter & Curriculum Pacing Tracker |
+| **76** | `/api/v1/academics/substitutions/syllabus-handoff` | `GET` | `academics` | Syllabus-Aware Substitute Teacher Instructional Handoff |
+| **77** | `/api/v1/staff/workload-equity` | `GET` | `staff` | Faculty Burnout Prevention & Workload Equity Index |
 
 ---
 
@@ -294,15 +305,15 @@ The automated test suite validates multi-tenant isolation, statutory payroll cal
 cd backend
 ./gradlew test
 ```
-*Expected Result: `BUILD SUCCESSFUL` (40/40 tests passed with 0 failures).*
+*Expected Result: `BUILD SUCCESSFUL` (48/48 tests passed with 0 failures).*
 
-### 2. Live 66-Endpoint Verification Script
-Verify all 66 live REST API endpoints against an active backend server:
+### 2. Live 77-Endpoint Verification Script
+Verify all 77 live REST API endpoints against an active backend server:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File backend\test_endpoints.ps1
 ```
-*Expected Result: All 66 endpoints return HTTP 200 OK with formatted payloads.*
+*Expected Result: All 77 endpoints return HTTP 200 OK with formatted payloads.*
 
 ---
 

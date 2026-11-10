@@ -129,6 +129,33 @@ class SchoolErpApplicationTests {
     @Autowired
     private com.schoolerp.modules.academics.service.MorningAssemblyService morningAssemblyService;
 
+    @Autowired
+    private com.schoolerp.modules.institution.service.InstitutionCalendarService institutionCalendarService;
+
+    @Autowired
+    private com.schoolerp.modules.identity.service.SessionSecurityService sessionSecurityService;
+
+    @Autowired
+    private com.schoolerp.modules.system.service.BulkImportService bulkImportService;
+
+    @Autowired
+    private com.schoolerp.modules.system.service.EnterpriseSchedulerService enterpriseSchedulerService;
+
+    @Autowired
+    private com.schoolerp.modules.academics.service.StudentRiskRadarService studentRiskRadarService;
+
+    @Autowired
+    private com.schoolerp.modules.examinations.service.HolisticProgressService holisticProgressService;
+
+    @Autowired
+    private com.schoolerp.modules.operations.service.ComplianceSentinelService complianceSentinelService;
+
+    @Autowired
+    private com.schoolerp.modules.academics.service.SyllabusEquityService syllabusEquityService;
+
+    @Autowired
+    private com.schoolerp.modules.staff.service.WorkloadEquityService workloadEquityService;
+
     @BeforeEach
     void setUp() {
         TenantContext.setTenantId("tenant_apex_mumbai_01");
@@ -919,6 +946,165 @@ class SchoolErpApplicationTests {
 
         var allRosters = morningAssemblyService.getAllRosters();
         assertFalse(allRosters.isEmpty());
+    }
+
+    @Test
+    void testInstitutionHolidayCalendarAndWorkingDayEvaluation() {
+        var diwaliDate = java.time.LocalDate.of(2026, 11, 18);
+        var holiday = institutionCalendarService.declareEvent(
+                "Diwali Vacation Break",
+                "VACATION",
+                diwaliDate,
+                diwaliDate.plusDays(2),
+                false,
+                "CLOSED",
+                "Festival closure across all branches"
+        );
+        assertNotNull(holiday);
+        assertFalse(holiday.isWorkingDay());
+
+        var evalHoliday = institutionCalendarService.evaluateWorkingDay(diwaliDate);
+        assertFalse(evalHoliday.isWorkingDay());
+        assertFalse(evalHoliday.isAttendanceRollCallRequired());
+    }
+
+    @Test
+    void testRefreshTokenRotationAndEmergencySessionRevoke() {
+        var loginReq = new LoginRequest();
+        loginReq.setEmail("admin@apexacademy.edu.in");
+        loginReq.setPassword("Admin123!");
+        AuthResponse loginRes = authService.login(loginReq);
+        assertNotNull(loginRes.getRefreshToken());
+
+        AuthResponse rotated = sessionSecurityService.rotateRefreshToken(loginRes.getRefreshToken());
+        assertNotNull(rotated.getToken());
+        assertNotNull(rotated.getRefreshToken());
+        assertNotEquals(loginRes.getRefreshToken(), rotated.getRefreshToken(), "Refresh token must rotate cleanly");
+
+        // Replaying already-rotated token must be rejected
+        assertThrows(org.springframework.security.authentication.BadCredentialsException.class,
+                () -> sessionSecurityService.rotateRefreshToken(loginRes.getRefreshToken()));
+
+        int revokedCount = sessionSecurityService.revokeAllSessionsForUser("admin@apexacademy.edu.in", "TEST_LOCKDOWN");
+        assertTrue(revokedCount >= 1);
+    }
+
+    @Test
+    void testBulkStudentCsvOnboardingWithRowErrorIsolation() {
+        String csv = "admissionNumber,fullName,gender,className,sectionName,guardianName,guardianPhone,guardianEmail\n" +
+                "ADM-CSV-9001,Meera Kulkarni,Female,Class 8,Section A,Suresh Kulkarni,+91 98201 11223,suresh@example.com\n" +
+                "ADM-CSV-9001,Duplicate Row,Male,Class 8,Section A,Test,+91 98000 00000,dup@example.com\n" +
+                "INVALID_SHORT_ROW\n";
+
+        var job = bulkImportService.importStudentsFromCsv("batch_onboarding_2026.csv", csv, "SUPER_ADMIN");
+        assertNotNull(job);
+        assertEquals(3, job.getTotalRows());
+        assertEquals(1, job.getSuccessCount());
+        assertEquals(2, job.getFailedCount());
+        assertEquals("COMPLETED_WITH_ERRORS", job.getStatus());
+    }
+
+    @Test
+    void testTransactionalOutboxRelayAndDeadLetterRetry() {
+        var failedEv = enterpriseSchedulerService.enqueueEvent(
+                "WHATSAPP_TRUANCY_ALERT",
+                "ADM-2024-0012",
+                "{\"student\":\"Aarav Sharma\"}",
+                true
+        );
+        assertEquals("DEAD_LETTER", failedEv.getStatus());
+
+        var pendingEv = enterpriseSchedulerService.enqueueEvent(
+                "LATE_FEE_ASSESSMENT",
+                "INV-2026-0843",
+                "{\"invoice\":\"INV-2026-0843\"}",
+                false
+        );
+        assertEquals("PENDING", pendingEv.getStatus());
+
+        int relayed = enterpriseSchedulerService.relayPendingOutboxEvents();
+        assertTrue(relayed >= 1);
+
+        int retried = enterpriseSchedulerService.retryFailedOrPendingForTenant();
+        assertTrue(retried >= 1);
+    }
+
+    @Test
+    void testMultiSignalStudentEarlyWarningRiskRadar() {
+        var student = studentRepository.findAllByTenantId("tenant_apex_mumbai_01").stream()
+                .filter(s -> s.getAdmissionNumber().startsWith("ADM-"))
+                .findFirst().orElseThrow();
+        student.setAttendancePercentage(68.0);
+        student.setFeeStatus("Overdue");
+        student.setBalanceAmount(25000.0);
+        studentRepository.save(student);
+
+        // Add frequent infirmary visits to elevate clinical signal
+        for (int i = 0; i < 3; i++) {
+            infirmaryService.recordVisit(student.getId(), "Headache / fatigue", 99.4, "110/70", 76,
+                    "Rest & hydration", 20, "RETURNED_TO_CLASS", "Nurse Priya");
+        }
+
+        var assessments = studentRiskRadarService.runSchoolWideEvaluation();
+        assertFalse(assessments.isEmpty());
+        var highRisk = studentRiskRadarService.getHighRiskStudents();
+        assertFalse(highRisk.isEmpty(), "Expected student with low attendance + overdue fee + clinic visits to trigger Risk Radar");
+        assertTrue(highRisk.get(0).getCompositeRiskScore() >= 35);
+    }
+
+    @Test
+    void testNep2020HolisticProgressCardCompilation() {
+        var student = studentRepository.findAllByTenantId("tenant_apex_mumbai_01").get(0);
+        var entry = holisticProgressService.recordAssessment(
+                student.getId(),
+                "Term 1 AY 2026-27",
+                "TEACHER",
+                "COGNITIVE_INQUIRY",
+                "EXEMPLARY",
+                8.5,
+                "Designed working solar water purifier model"
+        );
+        assertNotNull(entry);
+        assertEquals(4, entry.getNumericScore());
+
+        var report = holisticProgressService.compileStudentHpc(student.getId());
+        assertNotNull(report);
+        assertTrue(report.getTotalVocationalAndExperientialHours() > 0);
+        assertFalse(report.getAssessments().isEmpty());
+    }
+
+    @Test
+    void testCampusSafetyAndBusRtoComplianceExpirySentinel() {
+        var alerts = complianceSentinelService.scanExpiringCompliance(60);
+        assertNotNull(alerts);
+        assertFalse(alerts.isEmpty());
+        assertTrue(alerts.stream().anyMatch(a -> "EXPIRING_IN_30_DAYS".equals(a.getAlertSeverity())));
+    }
+
+    @Test
+    void testSyllabusAwareSubstituteHandoffAndWorkloadEquity() {
+        var progress = syllabusEquityService.updateSyllabusProgress(
+                "Class 10 - Section A",
+                "Mathematics",
+                "Sunita Rao",
+                "Chapter 5: Arithmetic Progressions",
+                "General Term of AP (Ex 5.2)",
+                "Solve Sum of N Terms (Ex 5.3) Questions 1 to 6",
+                "s3://apex-lms/math/ap-ex5-3.pdf",
+                71.0
+        );
+        assertNotNull(progress);
+
+        var handoff = syllabusEquityService.getSubstituteHandoffBrief("Class 10 - Section A", "Mathematics");
+        assertEquals("Chapter 5: Arithmetic Progressions", handoff.getCurrentChapter());
+        assertTrue(handoff.getImmediateSubstituteInstruction().contains("Ex 5.3"));
+
+        var equity = workloadEquityService.analyzeFacultyWorkloadEquity();
+        assertFalse(equity.isEmpty());
+        for (int i = 1; i < equity.size(); i++) {
+            assertTrue(equity.get(i).getCompositeWorkloadIndex() >= equity.get(i - 1).getCompositeWorkloadIndex(),
+                    "Workload equity list must sort least-burdened teachers first");
+        }
     }
 }
 

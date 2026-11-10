@@ -25,8 +25,9 @@ public class AuthService {
     private final TenantRepository tenantRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final SessionSecurityService sessionSecurityService;
 
-    @Transactional(readOnly = true)
+    @Transactional
     public AuthResponse login(LoginRequest request) {
         String tenantId = TenantContext.getTenantId();
         if (tenantId == null || tenantId.isBlank()) {
@@ -51,8 +52,9 @@ public class AuthService {
                         .affiliationNumber("CBSE #113042")
                         .build());
 
-        // 4. Generate JWT with tenant claims
+        // 4. Generate JWT with tenant claims + tracked refresh session
         String token = jwtService.generateToken(user, tenantId);
+        String refreshToken = sessionSecurityService.issueRefreshSession(user, tenantId, "Web/Mobile Portal", "127.0.0.1");
 
         List<String> roleNames = user.getRoles().stream()
                 .map(Role::getName)
@@ -60,6 +62,7 @@ public class AuthService {
 
         return AuthResponse.builder()
                 .token(token)
+                .refreshToken(refreshToken)
                 .tokenType("Bearer")
                 .user(AuthResponse.UserDto.builder()
                         .id(user.getId())
