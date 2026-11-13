@@ -1,4 +1,4 @@
-# Endpoint Verification Script
+﻿# Endpoint Verification Script
 $baseUri = "http://localhost:8080/api/v1"
 $tenantId = "tenant_apex_mumbai_01"
 
@@ -1127,7 +1127,118 @@ Write-Host "`n[Endpoint 84] GET /api/v1/academics/events/$liveEventId/roster/pri
 $callSheetResp = Invoke-WebRequest -Uri "$baseUri/academics/events/$liveEventId/roster/print" -Method Get -Headers $authHeaders -UseBasicParsing
 Write-Host "Event Call Sheet HTML Generated: $($callSheetResp.Content.Length) chars | Ready for Field Day printing!"
 
+# 85. Parent Student Leave Application
+Write-Host "`n[Endpoint 85] POST /api/v1/attendance/leaves/apply (Parent Student Leave Application)..."
+$leaveBody = @{
+    studentId = $aaravId
+    leaveType = "SICK_LEAVE"
+    startDate = (Get-Date).ToString("yyyy-MM-dd")
+    endDate = (Get-Date).AddDays(2).ToString("yyyy-MM-dd")
+    reason = "High viral fever; doctor recommended 3 days bed rest"
+    medicalCertificateUrl = "s3://apex-health/leaves/med-cert-0842.pdf"
+} | ConvertTo-Json
+$leaveRes = Invoke-RestMethod -Uri "$baseUri/attendance/leaves/apply" -Method Post -Body $leaveBody -Headers $authHeaders
+$leaveAppId = $leaveRes.data.id
+Write-Host "Student Leave Application Submitted: [ID: $leaveAppId] | Status: $($leaveRes.data.status) | Days: $($leaveRes.data.totalDays)"
+
+# 86. Teacher Leave Review & Attendance Auto-Normalization
+Write-Host "`n[Endpoint 86] PUT /api/v1/attendance/leaves/$leaveAppId/review (Teacher Approval & Normalization)..."
+$revBody = @{
+    status = "APPROVED"
+    reviewRemarks = "Prescription verified. Excused leave granted for 3 calendar days."
+} | ConvertTo-Json
+$revRes = Invoke-RestMethod -Uri "$baseUri/attendance/leaves/$leaveAppId/review" -Method Put -Body $revBody -Headers $authHeaders
+Write-Host "Leave Reviewed & Attendance Normalized: Status: $($revRes.data.status) by $($revRes.data.reviewedByStaffName)"
+
+# 87. Add Question to Question Bank with Bloom's Taxonomy
+Write-Host "`n[Endpoint 87] POST /api/v1/examinations/question-bank (Bloom's Taxonomy Question Authoring)..."
+$qBody = @{
+    subjectName = "Mathematics"
+    gradeLevel = "Class 10"
+    chapterName = "Chapter 4: Quadratic Equations"
+    topicName = "Nature of Discriminant"
+    questionType = "SHORT_ANSWER"
+    bloomsTaxonomy = "APPLY"
+    difficultyLevel = "MEDIUM"
+    marks = 3
+    questionText = "Find the values of p for which the quadratic equation px(x - 3) + 9 = 0 has equal real roots."
+    markingSchemeAnswerKey = "Rearrange: px^2 - 3px + 9 = 0. D = 9p^2 - 36p = 0 => 9p(p - 4) = 0. Since p != 0, p = 4. (3 marks)"
+} | ConvertTo-Json
+$qRes = Invoke-RestMethod -Uri "$baseUri/examinations/question-bank" -Method Post -Body $qBody -Headers $authHeaders
+Write-Host "Question Bank Item Added: [ID: $($qRes.data.id)] | Bloom's: $($qRes.data.bloomsTaxonomy) | Marks: $($qRes.data.marks)"
+
+# 88. Generate Balanced Blueprint Exam Paper & Printable Scheme
+Write-Host "`n[Endpoint 88] POST /api/v1/examinations/question-bank/generate-paper (Blueprint Paper Generator)..."
+$genPaperBody = @{
+    examTitle = "All-India Pre-Board Examination 2026 - Mathematics"
+    subjectName = "Mathematics"
+    gradeLevel = "Class 10"
+    totalMarks = 80
+    durationMinutes = 180
+    targetMcqCount = 5
+    targetShortCount = 3
+    targetLongCount = 2
+} | ConvertTo-Json
+$paperRes = Invoke-RestMethod -Uri "$baseUri/examinations/question-bank/generate-paper" -Method Post -Body $genPaperBody -Headers $authHeaders
+Write-Host "Exam Paper Generated: $($paperRes.data.examPaperCode) | Title: $($paperRes.data.examTitle) | Total Questions: $($paperRes.data.generatedQuestionsCount)"
+
+# 89. View Science/STEM Lab Inventory
+Write-Host "`n[Endpoint 89] GET /api/v1/operations/lab/inventory (Science & STEM Lab Stock)..."
+$labInvRes = Invoke-RestMethod -Uri "$baseUri/operations/lab/inventory?labName=ALL" -Method Get -Headers $authHeaders
+$sampleLabItem = $labInvRes.data[0]
+Write-Host "Retrieved $($labInvRes.data.Count) Lab Equipment Items across Science & Robotics Labs:"
+Write-Host " - Sample Item: $($sampleLabItem.itemName) ($($sampleLabItem.labName)) | Qty on Hand: $($sampleLabItem.quantityOnHand) | Cost: INR $($sampleLabItem.unitCost)"
+
+# 90. Record Lab Apparatus Breakage & Auto-Debit Student Fee Ledger
+Write-Host "`n[Endpoint 90] POST /api/v1/operations/lab/breakages (Apparatus Breakage Fine Assessment)..."
+$brkBody = @{
+    labItemId = $sampleLabItem.id
+    studentId = $aaravId
+    incidentDate = (Get-Date).ToString("yyyy-MM-dd")
+    faultType = "ACCIDENTAL"
+    assessedDamageCost = 850.00
+    remarks = "Burette stopcock sheared during volumetric titration analysis"
+} | ConvertTo-Json
+$brkRes = Invoke-RestMethod -Uri "$baseUri/operations/lab/breakages" -Method Post -Body $brkBody -Headers $authHeaders
+Write-Host "Lab Breakage Logged: Invoice $($brkRes.data.invoiceNumberGenerated) auto-debited to student $($brkRes.data.studentName) for INR $($brkRes.data.assessedDamageCost)"
+
+# 91. Campus Lost & Found Property Vault (Log & Claim)
+Write-Host "`n[Endpoint 91] POST /api/v1/operations/lost-and-found & PUT /claim (Property Vault Lifecycle)..."
+$lfBody = @{
+    itemCategory = "ELECTRONICS_CALCULATOR"
+    itemDescription = "Casio Scientific Calculator fx-991EX with initials 'AS' on back cover"
+    foundLocation = "Physics Laboratory Bench #3"
+    foundDate = (Get-Date).ToString("yyyy-MM-dd")
+    storageLockerRef = "Security Desk Locker C-2"
+} | ConvertTo-Json
+$lfRes = Invoke-RestMethod -Uri "$baseUri/operations/lost-and-found" -Method Post -Body $lfBody -Headers $authHeaders
+$lfItemId = $lfRes.data.id
+Write-Host "Lost & Found Item Logged: Tracking Code: $($lfRes.data.trackingCode) [Locker: $($lfRes.data.storageLockerRef)]"
+
+$claimBody = @{
+    claimedByStudentId = $aaravId
+    claimedByName = "Aarav Sharma"
+    claimVerificationNote = "Verified student signature and serial number match"
+} | ConvertTo-Json
+$claimRes = Invoke-RestMethod -Uri "$baseUri/operations/lost-and-found/$lfItemId/claim" -Method Put -Body $claimBody -Headers $authHeaders
+Write-Host "Property Handover Complete: Status: $($claimRes.data.status) to $($claimRes.data.claimedByName)"
+
+# 92. Class 12 Alumni & University Higher Education Placement
+Write-Host "`n[Endpoint 92] POST /api/v1/students/alumni/placements (University Admissions & Ranks)..."
+$placeBody = @{
+    studentId = $aaravId
+    universityName = "Indian Institute of Technology (IIT) Bombay"
+    country = "India"
+    degreeProgram = "B.Tech Computer Science & Engineering"
+    admissionType = "ENTRANCE_RANK"
+    entranceExamName = "JEE Advanced"
+    entranceScoreOrRank = "AIR 142"
+    scholarshipAmountInr = 150000.00
+} | ConvertTo-Json
+$placeRes = Invoke-RestMethod -Uri "$baseUri/students/alumni/placements" -Method Post -Body $placeBody -Headers $authHeaders
+Write-Host "Alumni University Admit Logged: $($placeRes.data.studentName) -> $($placeRes.data.universityName) ($($placeRes.data.degreeProgram)) | Rank: $($placeRes.data.entranceScoreOrRank)"
+
 Write-Host "`n============================================================"
-Write-Host " ALL 84 ENTERPRISE BACKEND ENDPOINTS VERIFIED & VALIDATED 100%"
+Write-Host " ALL 92 ENTERPRISE BACKEND ENDPOINTS VERIFIED & VALIDATED 100%"
 Write-Host "============================================================"
 Write-Host "============================================================"

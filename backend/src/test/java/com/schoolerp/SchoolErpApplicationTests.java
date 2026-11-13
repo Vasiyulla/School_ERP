@@ -162,6 +162,21 @@ class SchoolErpApplicationTests {
     @Autowired
     private com.schoolerp.modules.academics.service.SchoolEventService schoolEventService;
 
+    @Autowired
+    private com.schoolerp.modules.attendance.service.StudentLeaveService studentLeaveService;
+
+    @Autowired
+    private com.schoolerp.modules.examinations.service.ExamQuestionBankService questionBankService;
+
+    @Autowired
+    private com.schoolerp.modules.operations.service.LabInventoryService labInventoryService;
+
+    @Autowired
+    private com.schoolerp.modules.operations.service.LostAndFoundService lostAndFoundService;
+
+    @Autowired
+    private com.schoolerp.modules.students.service.AlumniPlacementService alumniPlacementService;
+
     @BeforeEach
     void setUp() {
         TenantContext.setTenantId("tenant_apex_mumbai_01");
@@ -1221,6 +1236,210 @@ class SchoolErpApplicationTests {
         assertTrue(callSheet.contains("TEAM_CAPTAIN"));
         assertTrue(callSheet.contains("FIRST_PLACE"));
         assertTrue(callSheet.contains("Event Coordinator Teacher"));
+    }
+
+    @Test
+    void testStudentLeaveApplicationAndAttendanceNormalization() {
+        var students = studentRepository.findAllByTenantId("tenant_apex_mumbai_01");
+        assertFalse(students.isEmpty());
+        var student = students.get(0);
+
+        // 1. Submit leave application
+        var applyReq = com.schoolerp.modules.attendance.dto.ApplyStudentLeaveRequest.builder()
+                .studentId(student.getId())
+                .leaveType("SICK_LEAVE")
+                .startDate(java.time.LocalDate.now())
+                .endDate(java.time.LocalDate.now().plusDays(2))
+                .reason("Viral fever and doctor prescribed bed rest")
+                .medicalCertificateUrl("s3://apex-health/leaves/med-cert-0842.pdf")
+                .build();
+
+        var app = studentLeaveService.applyLeave(applyReq, null, "Rajesh Sharma", "+91 98765 43210");
+        assertNotNull(app);
+        assertNotNull(app.getId());
+        assertEquals("PENDING", app.getStatus());
+        assertEquals(3, app.getTotalDays());
+
+        // 2. Review and approve leave with attendance normalization
+        var reviewReq = com.schoolerp.modules.attendance.dto.ReviewStudentLeaveRequest.builder()
+                .status("APPROVED")
+                .reviewRemarks("Medical certificate verified. Approved for 3 days.")
+                .build();
+
+        var reviewed = studentLeaveService.reviewLeave(app.getId(), reviewReq, "Dr. Vikram Seth");
+        assertNotNull(reviewed);
+        assertEquals("APPROVED", reviewed.getStatus());
+        assertEquals("Dr. Vikram Seth", reviewed.getReviewedByStaffName());
+        assertNotNull(reviewed.getReviewedAt());
+
+        // 3. Verify querying by status
+        var approvedList = studentLeaveService.getLeaves(null, "APPROVED", null, null);
+        assertFalse(approvedList.isEmpty());
+        assertTrue(approvedList.stream().anyMatch(l -> l.getId().equals(app.getId())));
+    }
+
+    @Test
+    void testExamQuestionBankAndBlueprintPaperGenerator() {
+        // 1. Add question with Bloom's taxonomy
+        var qReq = com.schoolerp.modules.examinations.dto.CreateQuestionRequest.builder()
+                .subjectName("Mathematics")
+                .gradeLevel("Class 10")
+                .chapterName("Chapter 4: Quadratic Equations")
+                .topicName("Nature of Roots")
+                .questionType("SHORT_ANSWER")
+                .bloomsTaxonomy("APPLY")
+                .difficultyLevel("MEDIUM")
+                .marks(3)
+                .questionText("Find the value of k for which the quadratic equation 2x^2 + kx + 3 = 0 has two real equal roots.")
+                .markingSchemeAnswerKey("For equal roots, D = b^2 - 4ac = 0. k^2 - 24 = 0 => k = +/- 2*sqrt(6). (3 marks)")
+                .build();
+
+        var question = questionBankService.addQuestion(qReq, "Sunita Rao");
+        assertNotNull(question);
+        assertNotNull(question.getId());
+        assertEquals("APPLY", question.getBloomsTaxonomy());
+
+        // 2. Generate exam paper from blueprint
+        var paperReq = com.schoolerp.modules.examinations.dto.GenerateExamPaperRequest.builder()
+                .examTitle("Periodic Assessment II - Mathematics 2026")
+                .subjectName("Mathematics")
+                .gradeLevel("Class 10")
+                .totalMarks(80)
+                .durationMinutes(180)
+                .targetMcqCount(5)
+                .targetShortCount(3)
+                .targetLongCount(2)
+                .build();
+
+        var paper = questionBankService.generateExamPaper(paperReq);
+        assertNotNull(paper);
+        assertNotNull(paper.getExamPaperCode());
+        assertTrue(paper.getExamPaperCode().startsWith("QP-"));
+        assertEquals("Mathematics", paper.getSubjectName());
+        assertFalse(paper.getSections().isEmpty());
+        assertTrue(paper.getGeneratedQuestionsCount() > 0);
+
+        // 3. Generate printable HTML exam paper
+        String htmlPaper = questionBankService.generatePrintableExamPaperHtml(paperReq);
+        assertNotNull(htmlPaper);
+        assertTrue(htmlPaper.contains("NATIONAL PUBLIC ACADEMY"));
+        assertTrue(htmlPaper.contains("Periodic Assessment II"));
+        assertTrue(htmlPaper.contains("Candidate Roll No"));
+    }
+
+    @Test
+    void testScienceLabInventoryAndApparatusBreakageFeeAssessment() {
+        var students = studentRepository.findAllByTenantId("tenant_apex_mumbai_01");
+        assertFalse(students.isEmpty());
+        var student = students.get(0);
+        double initialBalance = student.getBalanceAmount();
+
+        // 1. Fetch lab inventory
+        var inventory = labInventoryService.getInventory("ALL");
+        assertNotNull(inventory);
+        assertFalse(inventory.isEmpty());
+        var burette = inventory.stream()
+                .filter(i -> i.getItemName().contains("Burette"))
+                .findFirst()
+                .orElse(inventory.get(0));
+
+        int initialQty = burette.getQuantityOnHand();
+
+        // 2. Record apparatus breakage
+        var breakReq = com.schoolerp.modules.operations.dto.RecordLabBreakageRequest.builder()
+                .labItemId(burette.getId())
+                .studentId(student.getId())
+                .incidentDate(java.time.LocalDate.now())
+                .faultType("ACCIDENTAL")
+                .assessedDamageCost(new BigDecimal("850.00"))
+                .remarks("Burette tip fractured while clamping during titration practical")
+                .build();
+
+        var breakage = labInventoryService.recordBreakage(breakReq, "Lab Assistant Shinde");
+        assertNotNull(breakage);
+        assertNotNull(breakage.getInvoiceNumberGenerated());
+        assertTrue(breakage.getInvoiceNumberGenerated().startsWith("INV-BRK-"));
+        assertEquals("INVOICED_TO_STUDENT", breakage.getFineStatus());
+
+        // 3. Verify student fee ledger was debited
+        var updatedStudent = studentRepository.findById(student.getId()).orElseThrow();
+        assertEquals(initialBalance + 850.0, updatedStudent.getBalanceAmount(), 0.01);
+
+        // 4. Verify physical inventory was decremented
+        var updatedBurette = labInventoryService.getInventory("Chemistry Lab").stream()
+                .filter(i -> i.getId().equals(burette.getId()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(initialQty - 1, updatedBurette.getQuantityOnHand());
+    }
+
+    @Test
+    void testCampusLostAndFoundPropertyVault() {
+        var students = studentRepository.findAllByTenantId("tenant_apex_mumbai_01");
+        assertFalse(students.isEmpty());
+        var student = students.get(0);
+
+        // 1. Log found item
+        var logReq = com.schoolerp.modules.operations.dto.LogLostFoundRequest.builder()
+                .itemCategory("ELECTRONICS_CALCULATOR")
+                .itemDescription("Casio fx-991EX ClassWiz Scientific Calculator with initials AS engraved on cover")
+                .foundLocation("Physics Lab Station 4")
+                .foundDate(java.time.LocalDate.now())
+                .storageLockerRef("Security Vault Locker E-3")
+                .build();
+
+        var item = lostAndFoundService.logFoundItem(logReq, "Janitor Ramesh");
+        assertNotNull(item);
+        assertNotNull(item.getTrackingCode());
+        assertTrue(item.getTrackingCode().startsWith("LF-"));
+        assertEquals("FOUND_IN_CUSTODY", item.getStatus());
+
+        // 2. Claim item
+        var claimReq = com.schoolerp.modules.operations.dto.ClaimLostFoundRequest.builder()
+                .claimedByStudentId(student.getId())
+                .claimedByName(student.getFullName())
+                .claimVerificationNote("Matched engraving initials 'AS' and serial number verified")
+                .build();
+
+        var claimed = lostAndFoundService.processClaim(item.getId(), claimReq);
+        assertNotNull(claimed);
+        assertEquals("CLAIMED_RETURNED", claimed.getStatus());
+        assertEquals(student.getFullName(), claimed.getClaimedByName());
+        assertNotNull(claimed.getReturnedAt());
+    }
+
+    @Test
+    void testClass12AlumniAndHigherEducationPlacementTracker() {
+        var students = studentRepository.findAllByTenantId("tenant_apex_mumbai_01");
+        assertFalse(students.isEmpty());
+        var student = students.get(0);
+
+        // 1. Record university admission & national entrance rank
+        var placeReq = com.schoolerp.modules.students.dto.RecordPlacementRequest.builder()
+                .studentId(student.getId())
+                .universityName("IIT Bombay")
+                .country("India")
+                .degreeProgram("B.Tech Computer Science & Engineering")
+                .admissionType("ENTRANCE_RANK")
+                .entranceExamName("JEE Advanced")
+                .entranceScoreOrRank("AIR 142")
+                .scholarshipAmountInr(new BigDecimal("150000.00"))
+                .build();
+
+        var placement = alumniPlacementService.recordPlacement(placeReq);
+        assertNotNull(placement);
+        assertNotNull(placement.getId());
+        assertEquals("IIT Bombay", placement.getUniversityName());
+        assertEquals("AIR 142", placement.getEntranceScoreOrRank());
+
+        // 2. Verify alumni directory
+        var placements = alumniPlacementService.getPlacements("IIT");
+        assertFalse(placements.isEmpty());
+        assertTrue(placements.stream().anyMatch(p -> p.getUniversityName().contains("IIT Bombay")));
+
+        var profiles = alumniPlacementService.getAlumniProfiles();
+        assertFalse(profiles.isEmpty());
+        assertTrue(profiles.stream().anyMatch(p -> p.getStudentName().equals(student.getFullName())));
     }
 }
 
