@@ -23,6 +23,12 @@ public interface StudentRepository extends JpaRepository<Student, UUID> {
 
     List<Student> findAllByTenantIdAndClassNameAndSectionName(String tenantId, String className, String sectionName);
 
+    List<Student> findAllByTenantIdAndClassName(String tenantId, String className);
+
+    List<Student> findAllByTenantIdAndClassNameOrderByRollNumberAsc(String tenantId, String className);
+
+    List<Student> findAllByTenantIdAndClassNameAndSectionNameOrderByRollNumberAsc(String tenantId, String className, String sectionName);
+
     List<Student> findAllByTenantIdAndGuardianEmail(String tenantId, String guardianEmail);
 
     long countByTenantId(String tenantId);

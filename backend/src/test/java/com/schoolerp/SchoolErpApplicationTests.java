@@ -156,6 +156,12 @@ class SchoolErpApplicationTests {
     @Autowired
     private com.schoolerp.modules.staff.service.WorkloadEquityService workloadEquityService;
 
+    @Autowired
+    private com.schoolerp.modules.students.service.StudentExportService studentExportService;
+
+    @Autowired
+    private com.schoolerp.modules.academics.service.SchoolEventService schoolEventService;
+
     @BeforeEach
     void setUp() {
         TenantContext.setTenantId("tenant_apex_mumbai_01");
@@ -1106,6 +1112,117 @@ class SchoolErpApplicationTests {
                     "Workload equity list must sort least-burdened teachers first");
         }
     }
+
+    @Test
+    void testClassDataExportExcelCsvAndPrintableRoster() throws Exception {
+        var students = studentRepository.findAllByTenantId("tenant_apex_mumbai_01");
+        assertFalse(students.isEmpty(), "Seeded students must exist");
+        String sampleClass = students.get(0).getClassName();
+        String sampleSection = students.get(0).getSectionName();
+
+        // 1. Test Excel (.xlsx) generation
+        byte[] excelBytes = studentExportService.generateExcelExport("tenant_apex_mumbai_01", sampleClass, sampleSection);
+        assertNotNull(excelBytes);
+        assertTrue(excelBytes.length > 500, "Generated Excel workbook must contain valid binary XLSX payload");
+
+        // Validate Excel structure using POI
+        try (org.apache.poi.ss.usermodel.Workbook wb = new org.apache.poi.xssf.usermodel.XSSFWorkbook(new java.io.ByteArrayInputStream(excelBytes))) {
+            org.apache.poi.ss.usermodel.Sheet sheet = wb.getSheet("Class Roster");
+            assertNotNull(sheet, "Sheet 'Class Roster' must exist in workbook");
+            assertTrue(sheet.getPhysicalNumberOfRows() >= 5, "Sheet must contain header banner and student rows");
+        }
+
+        // 2. Test Streamed CSV generation
+        String csvData = studentExportService.generateCsvExport("tenant_apex_mumbai_01", sampleClass, sampleSection);
+        assertNotNull(csvData);
+        assertTrue(csvData.startsWith("\uFEFF"), "CSV must begin with UTF-8 BOM for Microsoft Excel compatibility");
+        assertTrue(csvData.contains("Admission No,Roll No,Full Name"), "CSV must contain standard student header columns");
+        assertTrue(csvData.lines().count() >= 2, "CSV must contain header line and student data lines");
+
+        // 3. Test Printable Roster HTML generation
+        String htmlRoster = studentExportService.generatePrintableRosterHtml("tenant_apex_mumbai_01", sampleClass, sampleSection);
+        assertNotNull(htmlRoster);
+        assertTrue(htmlRoster.contains("<!DOCTYPE html>"));
+        assertTrue(htmlRoster.contains("@media print"));
+        assertTrue(htmlRoster.contains("Official Classroom Attendance & Verification Roster"));
+        assertTrue(htmlRoster.contains("window.print()"));
+        assertTrue(htmlRoster.contains("Principal Seal & Signature"));
+    }
+
+    @Test
+    void testTeacherSchoolEventManagementAndParticipationHousePoints() {
+        // 1. Create a teacher-led school event
+        var eventReq = com.schoolerp.modules.academics.dto.CreateSchoolEventRequest.builder()
+                .title("Inter-School Annual Science & Robotics Olympiad 2026")
+                .description("Regional STEM championship featuring autonomous robotics and innovation models")
+                .category("SCIENCE_EXHIBITION")
+                .eventDate(java.time.LocalDate.now().plusDays(10))
+                .endDate(java.time.LocalDate.now().plusDays(11))
+                .venue("APJ Abdul Kalam Science Auditorium")
+                .coordinatorTeacherName("Dr. Vikram Sarabhai")
+                .targetClasses("Class 9, Class 10")
+                .maxParticipants(50)
+                .budgetAllocated(new BigDecimal("25000.00"))
+                .build();
+
+        var event = schoolEventService.createEvent(eventReq, "Dr. Vikram Sarabhai");
+        assertNotNull(event);
+        assertNotNull(event.getId());
+        assertEquals("PUBLISHED", event.getStatus());
+        assertEquals("SCIENCE_EXHIBITION", event.getCategory());
+
+        // 2. Fetch seeded students to enroll
+        var students = studentRepository.findAllByTenantId("tenant_apex_mumbai_01");
+        assertFalse(students.isEmpty(), "Seeded students must exist");
+        var leadStudent = students.get(0);
+
+        // 3. Enroll individual participant with role
+        var enrollReq = com.schoolerp.modules.academics.dto.EnrollParticipantRequest.builder()
+                .participants(java.util.List.of(
+                        com.schoolerp.modules.academics.dto.EnrollParticipantRequest.ParticipantItem.builder()
+                                .studentId(leadStudent.getId())
+                                .role("TEAM_CAPTAIN")
+                                .build()
+                ))
+                .build();
+
+        var enrolled = schoolEventService.enrollParticipants(event.getId(), enrollReq);
+        assertEquals(1, enrolled.size());
+        assertEquals("TEAM_CAPTAIN", enrolled.get(0).getRole());
+        assertEquals(leadStudent.getFullName(), enrolled.get(0).getStudentName());
+
+        // 4. Bulk enroll class cohort
+        var cohort = schoolEventService.enrollClassSection(event.getId(), "Class 10", "Section A", "PARTICIPANT");
+        assertNotNull(cohort);
+        assertFalse(cohort.isEmpty());
+
+        // 5. Record participant result & awards with House Points
+        var resultReq = com.schoolerp.modules.academics.dto.RecordParticipantResultRequest.builder()
+                .participationStatus("ATTENDED")
+                .achievementTier("FIRST_PLACE")
+                .housePointsAwarded(50)
+                .issueCertificate(true)
+                .teacherRemarks("Designed first-prize winning dual-axis solar tracking robotics arm")
+                .build();
+
+        var updated = schoolEventService.recordParticipantResult(event.getId(), enrolled.get(0).getId(), resultReq, "Dr. Vikram Sarabhai");
+        assertNotNull(updated);
+        assertEquals("FIRST_PLACE", updated.getAchievementTier());
+        assertEquals(50, updated.getHousePointsAwarded());
+        assertTrue(updated.isCertificateIssued());
+        assertNotNull(updated.getCertificateNumber());
+        assertTrue(updated.getCertificateNumber().startsWith("CERT-EVT-"));
+
+        // 6. Test printable event call sheet
+        String callSheet = schoolEventService.generateEventCallSheetHtml(event.getId());
+        assertNotNull(callSheet);
+        assertTrue(callSheet.contains("Official School Event Call Sheet"));
+        assertTrue(callSheet.contains(event.getTitle()));
+        assertTrue(callSheet.contains("TEAM_CAPTAIN"));
+        assertTrue(callSheet.contains("FIRST_PLACE"));
+        assertTrue(callSheet.contains("Event Coordinator Teacher"));
+    }
 }
+
 
 

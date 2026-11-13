@@ -45,6 +45,9 @@ dependencies {
     implementation 'org.flywaydb:flyway-core'
     runtimeOnly 'org.flywaydb:flyway-database-postgresql'
 
+    // Apache POI for Excel (.xlsx) Generation
+    implementation 'org.apache.poi:poi-ooxml:5.3.0'
+
     // Database Drivers
     runtimeOnly 'com.h2database:h2' // In-memory dev database with PostgreSQL compatibility
     runtimeOnly 'org.postgresql:postgresql' // Production PostgreSQL driver
