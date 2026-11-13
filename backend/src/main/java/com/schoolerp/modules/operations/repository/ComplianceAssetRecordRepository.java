@@ -10,5 +10,6 @@ import java.util.UUID;
 @Repository
 public interface ComplianceAssetRecordRepository extends JpaRepository<ComplianceAssetRecord, UUID> {
     List<ComplianceAssetRecord> findByTenantIdOrderByExpiryDateAsc(String tenantId);
+    List<ComplianceAssetRecord> findAllByTenantId(String tenantId);
 }
 

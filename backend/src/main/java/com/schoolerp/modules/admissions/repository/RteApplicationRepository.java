@@ -11,5 +11,6 @@ import java.util.UUID;
 public interface RteApplicationRepository extends JpaRepository<RteApplicationRecord, UUID> {
     List<RteApplicationRecord> findByTenantId(String tenantId);
     List<RteApplicationRecord> findByTenantIdAndAcademicYear(String tenantId, String academicYear);
+    long countByTenantId(String tenantId);
 }
 

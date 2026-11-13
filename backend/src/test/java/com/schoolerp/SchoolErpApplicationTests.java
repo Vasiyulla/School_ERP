@@ -177,6 +177,21 @@ class SchoolErpApplicationTests {
     @Autowired
     private com.schoolerp.modules.students.service.AlumniPlacementService alumniPlacementService;
 
+    @Autowired
+    private com.schoolerp.modules.institution.service.ConfidentialSafetyService confidentialSafetyService;
+
+    @Autowired
+    private com.schoolerp.modules.staff.service.FacultyAppraisalService facultyAppraisalService;
+
+    @Autowired
+    private com.schoolerp.modules.institution.service.ExecutiveCockpitService executiveCockpitService;
+
+    @Autowired
+    private com.schoolerp.modules.communication.service.GrievanceOmbudsmanService grievanceService;
+
+    @Autowired
+    private com.schoolerp.modules.institution.service.InspectionDossierService inspectionDossierService;
+
     @BeforeEach
     void setUp() {
         TenantContext.setTenantId("tenant_apex_mumbai_01");
@@ -1440,6 +1455,138 @@ class SchoolErpApplicationTests {
         var profiles = alumniPlacementService.getAlumniProfiles();
         assertFalse(profiles.isEmpty());
         assertTrue(profiles.stream().anyMatch(p -> p.getStudentName().equals(student.getFullName())));
+    }
+
+    @Test
+    void testConfidentialChildSafetyAndPoshPocsoVault() {
+        var logReq = com.schoolerp.modules.institution.dto.LogSafetyIncidentRequest.builder()
+                .classification("POCSO_STATUTORY")
+                .severityLevel("CRITICAL_RED")
+                .involvedPartyName("Confidential Inquiry #108")
+                .roleInvolved("STUDENT")
+                .incidentSummary("Allegation of peer cyber-bullying and unauthorized photographic dissemination")
+                .actionTakenInterim("Immediate counseling provided; devices confiscated for forensic audit")
+                .statutoryNotificationRequired(true)
+                .statutoryAuthorityRef("CWC-MUM-2026-904")
+                .inquiryCommitteeMembers("Principal Dr. Rajesh Sharma, Vice Principal Meera Joshi, School Psychologist Dr. Aditi Sen")
+                .build();
+
+        var incident = confidentialSafetyService.logIncident(logReq);
+        assertNotNull(incident);
+        assertNotNull(incident.getIncidentRefCode());
+        assertTrue(incident.getIncidentRefCode().startsWith("SAFE-"));
+        assertEquals("OPEN_INQUIRY", incident.getStatus());
+        assertTrue(incident.isStatutoryNotificationRequired());
+
+        // Conclude inquiry
+        var resolved = confidentialSafetyService.resolveIncident(incident.getId(), "CLOSED_RESOLVED", "Internal committee found zero malicious intent; behavioral counseling concluded.");
+        assertNotNull(resolved);
+        assertEquals("CLOSED_RESOLVED", resolved.getStatus());
+        assertNotNull(resolved.getClosedAt());
+    }
+
+    @Test
+    void testFacultyAnnualAppraisalAndPbasIncrementEngine() {
+        var employees = employeeRepository.findAllByTenantId("tenant_apex_mumbai_01");
+        assertFalse(employees.isEmpty());
+        var teacher = employees.get(0);
+
+        var evalReq = com.schoolerp.modules.staff.dto.EvaluateFacultyAppraisalRequest.builder()
+                .teacherId(teacher.getId())
+                .academicYear("2026-2027")
+                .selfAppraisalScore(24.0) // out of 25
+                .academicResultsScore(34.0) // out of 35
+                .institutionalDutyScore(19.0) // out of 20
+                .principalObservationScore(18.5) // out of 20
+                .principalEvaluationNotes("Exemplary classroom mastery, active robotics mentor, and 100% board pass outcome.")
+                .build();
+
+        var appraisal = facultyAppraisalService.evaluateTeacher(evalReq, "Principal Dr. Rajesh Sharma");
+        assertNotNull(appraisal);
+        assertEquals(95.5, appraisal.getCompositeScore(), 0.01);
+        assertEquals("EXEMPLARY_A_PLUS", appraisal.getAppraisalBand());
+        assertEquals(10.0, appraisal.getRecommendedIncrementPercentage());
+
+        var list = facultyAppraisalService.getAppraisals("2026-2027");
+        assertFalse(list.isEmpty());
+        assertTrue(list.stream().anyMatch(a -> a.getTeacherId().equals(teacher.getId())));
+    }
+
+    @Test
+    void testExecutiveBoardCommandCockpitKpis() {
+        var kpis = executiveCockpitService.getExecutiveKpis();
+        assertNotNull(kpis);
+        assertTrue(kpis.getTotalEnrolledStudents() > 0);
+        assertEquals(2000, kpis.getTotalSanctionedCapacity());
+        assertTrue(kpis.getOccupancyRatePercentage() > 0.0);
+        assertTrue(kpis.getTotalFacultyCount() > 0);
+        assertNotNull(kpis.getTeacherStudentRatio());
+        assertNotNull(kpis.getTotalFeeBilledInr());
+        assertNotNull(kpis.getFeeRealizationRatePercentage());
+        assertTrue(kpis.getCampusSafetyComplianceScore() >= 0.0);
+        assertNotNull(kpis.getInstitutionalHealthTier());
+    }
+
+    @Test
+    void testParentGrievanceOmbudsmanDeskAndSlaEscalation() {
+        var submitReq = com.schoolerp.modules.communication.dto.SubmitGrievanceRequest.builder()
+                .parentName("Suresh Deshmukh")
+                .parentPhone("+91 98333 44556")
+                .studentName("Ananya Deshmukh")
+                .className("Class 10 - Section A")
+                .category("TRANSPORT_BUS")
+                .subject("Bus Route #07 consistently arriving 25 minutes late at pickup stop")
+                .description("Morning pickup time is 07:15 AM but bus arrives at 07:40 AM causing student to miss morning assembly.")
+                .build();
+
+        var ticket = grievanceService.submitGrievance(submitReq, "Suresh Deshmukh");
+        assertNotNull(ticket);
+        assertNotNull(ticket.getTicketNumber());
+        assertTrue(ticket.getTicketNumber().startsWith("GRV-"));
+        assertEquals("TIER_1_TEACHER", ticket.getCurrentTier());
+        assertEquals("OPEN", ticket.getStatus());
+        assertNotNull(ticket.getSlaDeadline());
+
+        // Escalate to Principal Desk
+        var escReq = com.schoolerp.modules.communication.dto.ReviewGrievanceRequest.builder()
+                .action("ESCALATE_TO_PRINCIPAL")
+                .resolutionNotes("Driver route delay persists due to road construction; escalating for alternate fleet routing")
+                .build();
+
+        var escalated = grievanceService.reviewOrEscalate(ticket.getId(), escReq, "Transport Supervisor");
+        assertNotNull(escalated);
+        assertEquals("TIER_3_PRINCIPAL_DESK", escalated.getCurrentTier());
+        assertEquals("ESCALATED_TO_PRINCIPAL", escalated.getStatus());
+
+        // Principal resolves ticket
+        var resReq = com.schoolerp.modules.communication.dto.ReviewGrievanceRequest.builder()
+                .action("RESOLVE")
+                .resolutionNotes("Principal approved Route #07 diversion via Eastern Expressway. Pickup timing restored to 07:15 AM.")
+                .build();
+
+        var resolved = grievanceService.reviewOrEscalate(ticket.getId(), resReq, "Principal Dr. Rajesh Sharma");
+        assertNotNull(resolved);
+        assertEquals("RESOLVED", resolved.getStatus());
+        assertNotNull(resolved.getResolvedAt());
+    }
+
+    @Test
+    void testCbseInspectionReadinessDossierGenerator() {
+        var dossier = inspectionDossierService.generateDossier();
+        assertNotNull(dossier);
+        assertEquals("Apex Academy (Mumbai)", dossier.getSchoolName());
+        assertEquals("CBSE #113042", dossier.getAffiliationNumber());
+        assertEquals("FULL_COMPLIANCE", dossier.getInspectionReadinessStatus());
+        assertTrue(dossier.isBuildingSafetyNocValid());
+        assertTrue(dossier.isFireSafetyNocValid());
+        assertTrue(dossier.isCleanWaterAndSanitationValid());
+        assertFalse(dossier.getMandatoryDisclosures().isEmpty());
+
+        String html = inspectionDossierService.generatePrintableDossierHtml();
+        assertNotNull(html);
+        assertTrue(html.contains("Official Accreditation & CBSE Inspection Audit Dossier"));
+        assertTrue(html.contains("Apex Academy (Mumbai)"));
+        assertTrue(html.contains("Principal & Head of Institution"));
     }
 }
 

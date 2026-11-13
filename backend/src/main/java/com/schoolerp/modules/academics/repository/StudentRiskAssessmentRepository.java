@@ -10,6 +10,7 @@ import java.util.UUID;
 @Repository
 public interface StudentRiskAssessmentRepository extends JpaRepository<StudentRiskAssessment, UUID> {
     List<StudentRiskAssessment> findByTenantIdOrderByCompositeRiskScoreDesc(String tenantId);
+    List<StudentRiskAssessment> findAllByTenantId(String tenantId);
     List<StudentRiskAssessment> findByTenantIdAndRiskTierInOrderByCompositeRiskScoreDesc(String tenantId, List<String> tiers);
 }
 
