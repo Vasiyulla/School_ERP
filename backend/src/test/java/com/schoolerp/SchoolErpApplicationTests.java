@@ -192,6 +192,9 @@ class SchoolErpApplicationTests {
     @Autowired
     private com.schoolerp.modules.institution.service.InspectionDossierService inspectionDossierService;
 
+    @Autowired
+    private com.schoolerp.modules.system.service.DatabaseHaService databaseHaService;
+
     @BeforeEach
     void setUp() {
         TenantContext.setTenantId("tenant_apex_mumbai_01");
@@ -1587,6 +1590,59 @@ class SchoolErpApplicationTests {
         assertTrue(html.contains("Official Accreditation & CBSE Inspection Audit Dossier"));
         assertTrue(html.contains("Apex Academy (Mumbai)"));
         assertTrue(html.contains("Principal & Head of Institution"));
+    }
+
+    @Test
+    void testDualDatabaseHaClusterStatusAndReplication() {
+        var status = databaseHaService.getHaClusterStatus();
+        assertNotNull(status);
+        assertEquals("tenant_apex_mumbai_01", status.getTenantId());
+        assertEquals("school_apex_mumbai_01_db", status.getSchoolDatabaseName());
+        assertEquals("db-primary", status.getPrimaryNodeHost());
+        assertEquals(5432, status.getPrimaryNodePort());
+        assertEquals("ONLINE_ACTIVE", status.getPrimaryNodeStatus());
+        assertEquals("db-secondary", status.getSecondaryNodeHost());
+        assertEquals(5433, status.getSecondaryNodePort());
+        assertEquals("HOT_STANDBY_IN_SYNC", status.getSecondaryNodeStatus());
+        assertEquals("db-primary", status.getActivePrimaryHost());
+        assertEquals("STREAMING_SYNCHRONOUS", status.getReplicationMode());
+        assertEquals(0L, status.getReplicationLagBytes());
+        assertEquals(0L, status.getReplicationLagMs());
+        assertEquals("HIGH_AVAILABILITY_OPTIMAL", status.getClusterHealthTier());
+        assertEquals("MULTI_HOST_JDBC_AUTO_FAILOVER", status.getFailoverDriverMode());
+    }
+
+    @Test
+    void testSimulatedPrimaryCrashAndInstantFailoverPromotion() {
+        var req = com.schoolerp.modules.system.dto.SimulateFailoverRequest.builder()
+                .triggerReason("SIMULATED_PRIMARY_NODE_DISK_CORRUPTION")
+                .targetPromotionNode("db-secondary")
+                .remarks("Disaster recovery live promotion drill")
+                .build();
+
+        var result = databaseHaService.simulateFailover(req);
+        assertNotNull(result);
+        assertEquals("tenant_apex_mumbai_01", result.getTenantId());
+        assertEquals("FAILOVER_SUCCESSFUL_PROMOTED", result.getFailoverStatus());
+        assertEquals("db-primary", result.getPreviousPrimaryHost());
+        assertEquals("db-secondary", result.getNewPromotedPrimaryHost());
+        assertEquals(0L, result.getTransactionsLostCount());
+        assertEquals("100% ZERO_DATA_LOSS_CONFIRMED", result.getDataIntegrityAudit());
+        assertTrue(result.getFailoverDurationMs() < 3000L);
+
+        // Verify state is updated to reflect promoted secondary
+        var updated = databaseHaService.getHaClusterStatus();
+        assertEquals("db-secondary", updated.getActivePrimaryHost());
+        assertEquals("CRASHED_OFFLINE", updated.getPrimaryNodeStatus());
+        assertEquals("PROMOTED_PRIMARY", updated.getSecondaryNodeStatus());
+        assertEquals("FAILOVER_ACTIVE", updated.getClusterHealthTier());
+
+        // Reset topology back to default for other tests
+        var reset = databaseHaService.resetClusterTopology();
+        assertEquals("db-primary", reset.getActivePrimaryHost());
+        assertEquals("ONLINE_ACTIVE", reset.getPrimaryNodeStatus());
+        assertEquals("HOT_STANDBY_IN_SYNC", reset.getSecondaryNodeStatus());
+        assertEquals("HIGH_AVAILABILITY_OPTIMAL", reset.getClusterHealthTier());
     }
 }
 
