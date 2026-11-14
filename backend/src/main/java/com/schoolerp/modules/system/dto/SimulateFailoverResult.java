@@ -25,3 +25,4 @@ public class SimulateFailoverResult {
     private Instant executedAt;
     private String message;
 }
+

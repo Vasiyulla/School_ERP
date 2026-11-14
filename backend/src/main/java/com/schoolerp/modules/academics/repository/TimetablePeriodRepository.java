@@ -12,5 +12,8 @@ public interface TimetablePeriodRepository extends JpaRepository<TimetablePeriod
     List<TimetablePeriod> findAllByTenantIdAndDayOfWeekOrderByPeriodNumberAsc(String tenantId, String dayOfWeek);
     List<TimetablePeriod> findAllByTenantId(String tenantId);
     List<TimetablePeriod> findAllByTenantIdAndTeacherNameAndDayOfWeek(String tenantId, String teacherName, String dayOfWeek);
+    List<TimetablePeriod> findAllByTenantIdAndTeacherName(String tenantId, String teacherName);
+    List<TimetablePeriod> findAllByTenantIdAndClassNameAndSectionName(String tenantId, String className, String sectionName);
+    List<TimetablePeriod> findAllByTenantIdAndDayOfWeekAndPeriodNumber(String tenantId, String dayOfWeek, int periodNumber);
+    void deleteAllByTenantIdAndClassNameAndSectionName(String tenantId, String className, String sectionName);
 }
-

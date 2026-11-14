@@ -195,6 +195,66 @@ class SchoolErpApplicationTests {
     @Autowired
     private com.schoolerp.modules.system.service.DatabaseHaService databaseHaService;
 
+    @Autowired
+    private com.schoolerp.modules.staff.service.CpcSalaryService cpcSalaryService;
+
+    @Autowired
+    private com.schoolerp.modules.staff.service.StaffTaxService staffTaxService;
+
+    @Autowired
+    private com.schoolerp.modules.finance.service.CautionMoneyRefundService cautionMoneyRefundService;
+
+    @Autowired
+    private com.schoolerp.modules.staff.service.StaffSalaryLoanService staffSalaryLoanService;
+
+    @Autowired
+    private com.schoolerp.modules.finance.service.VendorProcurementService vendorProcurementService;
+
+    @Autowired
+    private com.schoolerp.modules.academics.service.TimetableSchedulingService timetableSchedulingService;
+
+    @Autowired
+    private com.schoolerp.modules.staff.service.TeacherCpdService teacherCpdService;
+
+    @Autowired
+    private com.schoolerp.modules.finance.service.BankReconciliationService bankReconciliationService;
+
+    @Autowired
+    private com.schoolerp.modules.finance.service.SiblingConcessionService siblingConcessionService;
+
+    @Autowired
+    private com.schoolerp.modules.attendance.service.BiometricSyncService biometricSyncService;
+
+    @Autowired
+    private com.schoolerp.modules.staff.service.DesignationHierarchyService designationService;
+
+    @Autowired
+    private com.schoolerp.modules.academics.service.LessonMaterialService lessonMaterialService;
+
+    @Autowired
+    private com.schoolerp.modules.academics.service.ExitTicketService exitTicketService;
+
+    @Autowired
+    private com.schoolerp.modules.students.service.LearningPortfolioService learningPortfolioService;
+
+    @Autowired
+    private com.schoolerp.modules.academics.service.AdaptiveStudyPlanService adaptiveStudyPlanService;
+
+    @Autowired
+    private com.schoolerp.modules.students.service.ClassroomBadgeService classroomBadgeService;
+
+    @Autowired
+    private com.schoolerp.modules.academics.service.PblProjectService pblProjectService;
+
+    @Autowired
+    private com.schoolerp.modules.institution.service.EmergencyCampusModeService emergencyCampusModeService;
+
+    @Autowired
+    private com.schoolerp.modules.academics.service.VirtualClassroomService virtualClassroomService;
+
+    @Autowired
+    private com.schoolerp.modules.attendance.service.VirtualAttendanceService virtualAttendanceService;
+
     @BeforeEach
     void setUp() {
         TenantContext.setTenantId("tenant_apex_mumbai_01");
@@ -1643,6 +1703,885 @@ class SchoolErpApplicationTests {
         assertEquals("ONLINE_ACTIVE", reset.getPrimaryNodeStatus());
         assertEquals("HOT_STANDBY_IN_SYNC", reset.getSecondaryNodeStatus());
         assertEquals("HIGH_AVAILABILITY_OPTIMAL", reset.getClusterHealthTier());
+    }
+
+    @Test
+    void testSeventhCpcPayScaleAndDaRevision() {
+        var matrices = cpcSalaryService.getOrCreateCpcMatrix();
+        assertNotNull(matrices);
+        assertFalse(matrices.isEmpty());
+        assertTrue(matrices.stream().anyMatch(m -> "LEVEL_6_PRT".equals(m.getPayLevel())));
+
+        var req = com.schoolerp.modules.staff.dto.ApplyDaRevisionRequest.builder()
+                .newDaPercentage(50.0)
+                .effectiveFromMonth("2026-07")
+                .govtOrderNotificationRef("MoE/CBSE/F.No.1/1/2026-E.II(B)")
+                .build();
+
+        var result = cpcSalaryService.applySchoolWideDaRevision(req);
+        assertNotNull(result);
+        assertEquals(50.0, result.getUpdatedDaPercentage());
+        assertEquals("2026-07", result.getEffectiveFromMonth());
+        assertTrue(result.getAffectedFacultyCount() > 0);
+        assertNotNull(result.getSchoolMonthlyPayrollIncreaseInr());
+    }
+
+    @Test
+    void testStaffTaxDeclarationAndForm16Computation() {
+        var employees = employeeRepository.findAllByTenantId("tenant_apex_mumbai_01");
+        assertFalse(employees.isEmpty());
+        var teacher = employees.get(0);
+
+        var req = com.schoolerp.modules.staff.dto.SubmitTaxDeclarationRequest.builder()
+                .employeeId(teacher.getId())
+                .taxRegime("NEW_REGIME_115BAC")
+                .financialYear("2026-2027")
+                .build();
+
+        var declaration = staffTaxService.submitDeclaration(req);
+        assertNotNull(declaration);
+        assertEquals("NEW_REGIME_115BAC", declaration.getTaxRegime());
+        assertEquals(new java.math.BigDecimal("75000.00"), declaration.getStandardDeduction());
+        assertNotNull(declaration.getMonthlyTdsDeduction());
+
+        var form16 = staffTaxService.generateForm16PartB(teacher.getId());
+        assertNotNull(form16);
+        assertEquals("Apex Academy (Mumbai)", form16.getSchoolName());
+        assertEquals(teacher.getFullName(), form16.getEmployeeName());
+        assertEquals("NEW_REGIME_115BAC", form16.getChosenTaxRegime());
+        assertEquals(new java.math.BigDecimal("75000.00"), form16.getStandardDeduction());
+        assertNotNull(form16.getTotalTaxPayableAnnual());
+    }
+
+    @Test
+    void testStudentCautionMoneyRefundLedgerVoucher() {
+        var students = studentRepository.findAllByTenantId("tenant_apex_mumbai_01");
+        assertFalse(students.isEmpty());
+        var student = students.get(0);
+
+        var refundReq = com.schoolerp.modules.finance.dto.ProcessCautionMoneyRefundRequest.builder()
+                .studentId(student.getId())
+                .autoDeductUnpaidTuitionDues(true)
+                .autoDeductLabApparatusBreakages(true)
+                .refundMode("BANK_NEFT")
+                .beneficiaryAccountNo("50100482910482")
+                .beneficiaryIfsc("HDFC0001029")
+                .reason("Completed Class 12 Senior Secondary Graduation")
+                .build();
+
+        var refund = cautionMoneyRefundService.processDepartureRefund(refundReq);
+        assertNotNull(refund);
+        assertNotNull(refund.getRefundVoucherNumber());
+        assertTrue(refund.getRefundVoucherNumber().startsWith("REF-VOUCHER-"));
+        assertEquals("REFUNDED_CLOSED", refund.getRefundStatus());
+        assertNotNull(refund.getNetRefundPayoutInr());
+        assertNotNull(refund.getLedgerJournalEntryId());
+    }
+
+    @Test
+    void testStaffSalaryLoanDisbursementAndEmiPayrollDeduction() {
+        var employees = employeeRepository.findAllByTenantId("tenant_apex_mumbai_01");
+        assertFalse(employees.isEmpty());
+        var teacher = employees.get(0);
+
+        var loanReq = com.schoolerp.modules.staff.dto.ApplySalaryLoanRequest.builder()
+                .employeeId(teacher.getId())
+                .loanType("FESTIVAL_ADVANCE")
+                .principalAmount(new java.math.BigDecimal("30000.00"))
+                .tenureMonths(6)
+                .remarks("Diwali festival staff advance")
+                .build();
+
+        var loan = staffSalaryLoanService.disburseLoan(loanReq, "Principal Dr. Rajesh Sharma");
+        assertNotNull(loan);
+        assertEquals("ACTIVE_RECOVERING", loan.getStatus());
+        assertEquals(new java.math.BigDecimal("5000.00"), loan.getMonthlyEmi());
+        assertEquals(new java.math.BigDecimal("30000.00"), loan.getRemainingBalance());
+
+        var activeLoans = staffSalaryLoanService.getActiveLoans();
+        assertFalse(activeLoans.isEmpty());
+        assertTrue(activeLoans.stream().anyMatch(l -> l.getId().equals(loan.getId())));
+    }
+
+    @Test
+    void testVendorBillProcurementWithTds194C() {
+        var invReq = com.schoolerp.modules.finance.dto.CreateVendorInvoiceRequest.builder()
+                .vendorName("Mahavir Bus Fleet Maintenance Corp")
+                .vendorGstin("27AAACM9921D1ZA")
+                .vendorPan("AAACM9921D")
+                .serviceCategory("FLEET_TRANSPORT")
+                .invoiceNumber("INV-BUS-2026-8812")
+                .invoiceDate(java.time.LocalDate.now())
+                .tdsSection("SECTION_194C_CONTRACTORS")
+                .tdsRatePercentage(2.0)
+                .grossAmount(new java.math.BigDecimal("150000.00"))
+                .purchaseOrderRef("PO-FLEET-2026-0041")
+                .remarks("Quarterly bus fitness inspection, brake shoe replacement, and speed governor calibration")
+                .build();
+
+        var bill = vendorProcurementService.recordVendorInvoice(invReq);
+        assertNotNull(bill);
+        assertEquals("Mahavir Bus Fleet Maintenance Corp", bill.getVendorName());
+        assertEquals("SECTION_194C_CONTRACTORS", bill.getTdsSection());
+        assertEquals(new java.math.BigDecimal("3000.00"), bill.getTdsWithheldAmount()); // 2% of 1.5L
+        assertEquals(new java.math.BigDecimal("147000.00"), bill.getNetPayableAmount());
+        assertEquals("PENDING_DISBURSEMENT", bill.getPaymentStatus());
+    }
+
+    @Test
+    void testTimetableAutoSchedulingEngine() {
+        var req = com.schoolerp.modules.academics.dto.AutoGenerateTimetableRequest.builder()
+                .academicYear("2026-2027")
+                .className("Grade 10")
+                .sectionName("A")
+                .periodsPerDay(7)
+                .daysOfWeek(java.util.List.of("Monday", "Tuesday", "Wednesday", "Thursday", "Friday"))
+                .subjects(java.util.List.of("Mathematics", "Physics", "Chemistry", "English", "Social Science", "Hindi", "Physical Education"))
+                .teacherAssignments(java.util.Map.of(
+                        "Mathematics", "Mr. Sharma",
+                        "Physics", "Dr. Rao",
+                        "Chemistry", "Ms. Kapoor",
+                        "English", "Ms. Davis",
+                        "Social Science", "Mr. Verma",
+                        "Hindi", "Ms. Joshi",
+                        "Physical Education", "Coach Singh"
+                ))
+                .build();
+
+        var result = timetableSchedulingService.autoGenerateClassTimetable(req);
+        assertNotNull(result);
+        assertEquals("Grade 10", result.getClassName());
+        assertEquals("A", result.getSectionName());
+        assertEquals(35, result.getTotalPeriodsScheduled()); // 5 days * 7 periods
+        assertEquals(0, result.getCollisionCount());
+        assertEquals("OPTIMAL_COLLISION_FREE", result.getStatus());
+        assertFalse(result.getGeneratedSlots().isEmpty());
+
+        var teacherSchedule = timetableSchedulingService.getTeacherWeeklySchedule("Mr. Sharma");
+        assertNotNull(teacherSchedule);
+        assertFalse(teacherSchedule.isEmpty());
+    }
+
+    @Test
+    void testTeacherCpd50HourComplianceTracker() {
+        var logReq = com.schoolerp.modules.staff.dto.LogCpdTrainingRequest.builder()
+                .staffId(java.util.UUID.randomUUID())
+                .teacherName("Ms. Pooja Hegde")
+                .trainingYear("2026-2027")
+                .agency("CBSE_COE")
+                .trainingTopic("Competency Based Assessment & Item Writing")
+                .domain("PEDAGOGY")
+                .durationHours(15)
+                .completionDate(java.time.LocalDate.now())
+                .certificateRef("CERT-CBSE-COE-9912")
+                .evaluationScore(92.0)
+                .build();
+
+        var record = teacherCpdService.logTraining(logReq, "Principal Dr. Rajesh Sharma");
+        assertNotNull(record);
+        assertEquals("Ms. Pooja Hegde", record.getTeacherName());
+        assertEquals(15, record.getDurationHours());
+        assertEquals("CBSE_COE", record.getAgency());
+
+        var report = teacherCpdService.getSchoolCpdComplianceSummary("2026-2027");
+        assertNotNull(report);
+        assertTrue(report.getTotalTeachersAudited() >= 1);
+        assertFalse(report.getTeacherSummaries().isEmpty());
+    }
+
+    @Test
+    void testBankStatementAutoReconciliation() {
+        // Create an invoice to reconcile
+        var student = studentRepository.findAllByTenantId("tenant_apex_mumbai_01").get(0);
+        var testInv = feeInvoiceRepository.save(com.schoolerp.modules.finance.entity.FeeInvoice.builder()
+                .tenantId("tenant_apex_mumbai_01")
+                .invoiceNumber("INV-2026-9901")
+                .studentId(student.getId())
+                .studentName(student.getFullName())
+                .totalAmount(new java.math.BigDecimal("35000.00"))
+                .paidAmount(java.math.BigDecimal.ZERO)
+                .balanceAmount(new java.math.BigDecimal("35000.00"))
+                .dueDate(java.time.LocalDate.now().plusDays(15))
+                .status("OVERDUE")
+                .build());
+
+        var reconReq = com.schoolerp.modules.finance.dto.ReconcileBankStatementRequest.builder()
+                .bankName("HDFC_BANK")
+                .statementEntries(java.util.List.of(
+                        com.schoolerp.modules.finance.dto.BankStatementEntryInputDTO.builder()
+                                .utrNumber("HDFC20261114001")
+                                .amount(new java.math.BigDecimal("35000.00"))
+                                .transactionDate(java.time.LocalDate.now())
+                                .narration("NEFT/CMS/INV-2026-9901/PARENT FEE TRANSFER")
+                                .build(),
+                        com.schoolerp.modules.finance.dto.BankStatementEntryInputDTO.builder()
+                                .utrNumber("HDFC20261114002")
+                                .amount(new java.math.BigDecimal("5000.00"))
+                                .transactionDate(java.time.LocalDate.now())
+                                .narration("CASH DEPOSIT AT KANDIVALI BRANCH - UNKNOWN REF")
+                                .build()
+                ))
+                .build();
+
+        var result = bankReconciliationService.processStatement(reconReq);
+        assertNotNull(result);
+        assertEquals(2, result.getTotalProcessed());
+        assertEquals(1, result.getAutoReconciledCount());
+        assertEquals(1, result.getSuspensePoolCount());
+        assertEquals(new java.math.BigDecimal("35000.00"), result.getTotalReconciledAmount());
+
+        var suspense = bankReconciliationService.getSuspensePool();
+        assertFalse(suspense.isEmpty());
+    }
+
+    @Test
+    void testSiblingConcessionPolicyEvaluation() {
+        var polReq = com.schoolerp.modules.finance.dto.ConfigureConcessionPolicyRequest.builder()
+                .policyCode("SIBLING_TIER_2")
+                .siblingRank(2)
+                .concessionPercentage(new java.math.BigDecimal("15.00"))
+                .applicableFeeHead("TUITION_FEE")
+                .isActive(true)
+                .build();
+
+        var policy = siblingConcessionService.configurePolicy(polReq);
+        assertNotNull(policy);
+        assertEquals(new java.math.BigDecimal("15.00"), policy.getConcessionPercentage());
+
+        var famReq = com.schoolerp.modules.finance.dto.EvaluateFamilyConcessionRequest.builder()
+                .familyId("FAM-SHARMA-01")
+                .primaryGuardianPhone("+91-9820011223")
+                .children(java.util.List.of(
+                        com.schoolerp.modules.finance.dto.StudentSiblingInputDTO.builder()
+                                .studentId(java.util.UUID.randomUUID())
+                                .studentName("Aarav Sharma")
+                                .dateOfBirth(java.time.LocalDate.of(2010, 5, 12))
+                                .standardTuitionFee(new java.math.BigDecimal("40000.00"))
+                                .build(),
+                        com.schoolerp.modules.finance.dto.StudentSiblingInputDTO.builder()
+                                .studentId(java.util.UUID.randomUUID())
+                                .studentName("Ananya Sharma")
+                                .dateOfBirth(java.time.LocalDate.of(2013, 8, 24))
+                                .standardTuitionFee(new java.math.BigDecimal("40000.00"))
+                                .build()
+                ))
+                .build();
+
+        var eval = siblingConcessionService.evaluateFamily(famReq);
+        assertNotNull(eval);
+        assertEquals(2, eval.getTotalChildren());
+        assertEquals(new java.math.BigDecimal("80000.00"), eval.getTotalOriginalTuitionFee());
+        assertEquals(new java.math.BigDecimal("6000.00"), eval.getTotalConcessionsGranted()); // 15% of 40,000
+        assertEquals(new java.math.BigDecimal("74000.00"), eval.getNetFamilyTuitionPayable());
+
+        // Verify Rank 1 (Aarav, 0% discount) and Rank 2 (Ananya, 15% discount)
+        assertEquals(1, eval.getSiblingConcessions().get(0).getSiblingRank());
+        assertEquals(new java.math.BigDecimal("0.00"), eval.getSiblingConcessions().get(0).getDiscountAmount());
+        assertEquals(2, eval.getSiblingConcessions().get(1).getSiblingRank());
+        assertEquals(new java.math.BigDecimal("6000.00"), eval.getSiblingConcessions().get(1).getDiscountAmount());
+    }
+
+    @Test
+    void testBiometricIoTDevicePunchSync() {
+        var webhookReq = com.schoolerp.modules.attendance.dto.BiometricPunchWebhookRequest.builder()
+                .deviceSerialNumber("eSSL-GATE-01")
+                .rawIpAddress("192.168.1.150")
+                .punches(java.util.List.of(
+                        com.schoolerp.modules.attendance.dto.BiometricPunchPayloadItemDTO.builder()
+                                .staffCode("TCH-2024-001")
+                                .staffName("Dr. Rajesh Sharma")
+                                .punchTime(java.time.LocalDateTime.of(2026, 11, 14, 8, 5, 0))
+                                .punchType("IN")
+                                .build(),
+                        com.schoolerp.modules.attendance.dto.BiometricPunchPayloadItemDTO.builder()
+                                .staffCode("TCH-2024-002")
+                                .staffName("Ms. Pooja Hegde")
+                                .punchTime(java.time.LocalDateTime.of(2026, 11, 14, 8, 45, 0))
+                                .punchType("IN")
+                                .build()
+                ))
+                .build();
+
+        var syncResult = biometricSyncService.ingestBiometricPunches(webhookReq);
+        assertNotNull(syncResult);
+        assertEquals(2, syncResult.getTotalPunchesReceived());
+        assertEquals(1, syncResult.getPresentCount());      // 08:05 is PRESENT
+        assertEquals(1, syncResult.getLateArrivalCount());  // 08:45 is LATE_ARRIVAL
+
+        var roster = biometricSyncService.getDailyBiometricSummary(java.time.LocalDate.of(2026, 11, 14));
+        assertNotNull(roster);
+        assertTrue(roster.getTotalPunches() >= 2);
+    }
+
+    @Test
+    void testCreateAndToggleCustomDesignations() {
+        var createReq = com.schoolerp.modules.staff.dto.CreateDesignationRequest.builder()
+                .designationCode("ROBOTICS_COORDINATOR")
+                .title("Robotics & AI Lab Coordinator")
+                .department("Academics")
+                .hierarchyTier(3)
+                .reportsToDesignationCode("HOD_SCIENCE")
+                .baseRole("ROLE_TEACHER")
+                .financialApprovalLimit(new java.math.BigDecimal("75000.00"))
+                .defaultCpcLevel("LEVEL_8")
+                .build();
+
+        var created = designationService.createCustomDesignation(createReq);
+        assertNotNull(created);
+        assertEquals("ROBOTICS_COORDINATOR", created.getDesignationCode());
+        assertEquals("Robotics & AI Lab Coordinator", created.getTitle());
+        assertTrue(created.isActive());
+
+        // Toggle inactive (SaaS school deactivating an unwanted designation)
+        var toggled = designationService.toggleDesignationStatus(created.getId(), false);
+        assertNotNull(toggled);
+        assertFalse(toggled.isActive());
+
+        // Restore active
+        var restored = designationService.toggleDesignationStatus(created.getId(), true);
+        assertTrue(restored.isActive());
+
+        // List active designations in Academics department
+        var academicsList = designationService.getDesignations("Academics", true);
+        assertNotNull(academicsList);
+        assertTrue(academicsList.stream().anyMatch(d -> d.getDesignationCode().equals("ROBOTICS_COORDINATOR")));
+    }
+
+    @Test
+    void testOrganizationalHierarchyAndApprovalThresholds() {
+        // Retrieve full tree hierarchy
+        var hierarchyTree = designationService.getOrganizationalHierarchyTree();
+        assertNotNull(hierarchyTree);
+        assertFalse(hierarchyTree.isEmpty());
+
+        var root = hierarchyTree.get(0);
+        assertEquals("PRINCIPAL", root.getDesignationCode());
+        assertFalse(root.getSubordinates().isEmpty(), "Principal should have department heads reporting");
+
+        // Validate approval threshold for a cashier / accountant
+        var authReqWithinLimit = com.schoolerp.modules.staff.dto.CheckApprovalAuthorityRequest.builder()
+                .employeeCode("EMP-2024-0042")
+                .actionType("FEE_REFUND")
+                .amount(new java.math.BigDecimal("15000.00"))
+                .build();
+
+        var resultWithin = designationService.validateApprovalAuthority(authReqWithinLimit);
+        assertNotNull(resultWithin);
+
+        var authReqExceeding = com.schoolerp.modules.staff.dto.CheckApprovalAuthorityRequest.builder()
+                .employeeCode("EMP-2024-0042")
+                .actionType("FEE_REFUND")
+                .amount(new java.math.BigDecimal("250000.00"))
+                .build();
+
+        var resultExceeding = designationService.validateApprovalAuthority(authReqExceeding);
+        assertNotNull(resultExceeding);
+    }
+
+    @Test
+    void testPublishClassroomLessonMaterials() {
+        var pubReq = com.schoolerp.modules.academics.dto.PublishLessonMaterialRequest.builder()
+                .subjectName("Physics")
+                .className("Grade 10")
+                .sectionName("A")
+                .chapterName("Chapter 10: Light - Reflection and Refraction")
+                .topicName("Ray Diagrams for Concave & Convex Mirrors")
+                .title("Class Slides & NCERT Solved Ray Diagrams")
+                .description("Complete presentation slides presented in Period 2 with ray diagrams and mirror formulas")
+                .materialType("PRESENTATION_SLIDES")
+                .fileUrl("https://storage.apexacademy.edu.in/materials/physics-ch10-slides.pptx")
+                .thumbnailUrl("https://storage.apexacademy.edu.in/thumbnails/physics-ch10.png")
+                .fileSizeBytes(15728640L) // 15.0 MB
+                .fileExtension("pptx")
+                .lessonDate(java.time.LocalDate.now())
+                .isDownloadable(true)
+                .build();
+
+        var published = lessonMaterialService.publishMaterial(pubReq, "Dr. Vikram Seth");
+        assertNotNull(published);
+        assertNotNull(published.getId());
+        assertEquals("Physics", published.getSubjectName());
+        assertEquals("Grade 10", published.getClassName());
+        assertEquals("PRESENTATION_SLIDES", published.getMaterialType());
+        assertEquals("15.0 MB", published.getFormattedFileSize());
+        assertTrue(published.isDownloadable());
+    }
+
+    @Test
+    void testStudentStudyLockerFeedAndEngagementLog() {
+        // Publish e-book chapter
+        var pubReq = com.schoolerp.modules.academics.dto.PublishLessonMaterialRequest.builder()
+                .subjectName("Mathematics")
+                .className("Grade 10")
+                .sectionName("ALL")
+                .chapterName("Chapter 4: Quadratic Equations")
+                .topicName("Standard Form & Quadratic Formula Derivation")
+                .title("NCERT Exemplar E-Book & Teacher Annotations")
+                .description("Digital textbook excerpt with handwritten teacher notes")
+                .materialType("E_BOOK_PDF")
+                .fileUrl("https://storage.apexacademy.edu.in/materials/math-ch4-ebook.pdf")
+                .fileSizeBytes(8388608L) // 8.0 MB
+                .fileExtension("pdf")
+                .lessonDate(java.time.LocalDate.now())
+                .isDownloadable(true)
+                .build();
+
+        var material = lessonMaterialService.publishMaterial(pubReq, "Sunita Rao");
+        assertNotNull(material);
+
+        // Student fetches study locker class feed
+        var feed = lessonMaterialService.getClassFeed("Grade 10", "A", "Mathematics", null);
+        assertNotNull(feed);
+        assertFalse(feed.isEmpty());
+        assertTrue(feed.stream().anyMatch(m -> m.getId().equals(material.getId())));
+
+        // Student accesses/reads the material
+        var student = studentRepository.findAllByTenantId("tenant_apex_mumbai_01").get(0);
+        var accessReq = com.schoolerp.modules.academics.dto.RecordMaterialAccessRequest.builder()
+                .materialId(material.getId())
+                .studentId(student.getId())
+                .studentName(student.getFullName())
+                .durationSeconds(420) // 7 minutes
+                .isCompleted(true)
+                .build();
+
+        lessonMaterialService.recordStudentAccess(accessReq);
+
+        // Teacher checks engagement report
+        var report = lessonMaterialService.getMaterialEngagement(material.getId());
+        assertNotNull(report);
+        assertEquals(material.getId(), report.getMaterialId());
+        assertTrue(report.getTotalViews() >= 1);
+        assertEquals(1, report.getUniqueStudentsViewed());
+        assertTrue(report.getAverageDurationSeconds() > 0);
+        assertFalse(report.getStudentAccessList().isEmpty());
+    }
+
+    @Test
+    void testInClassExitTicketsAndComprehensionHeatmap() {
+        var student = studentRepository.findAllByTenantId("tenant_apex_mumbai_01").get(0);
+
+        var launchReq = com.schoolerp.modules.academics.dto.LaunchExitTicketRequest.builder()
+                .className("Grade 10")
+                .sectionName("A")
+                .subjectName("Physics")
+                .topicName("Refraction Index & Snell's Law")
+                .questionText("What is the ratio of sin(i) to sin(r) called?")
+                .questionType("MCQ")
+                .options(java.util.List.of("Refractive Index", "Critical Angle", "Focal Length", "Dispersive Power"))
+                .correctOption("Refractive Index")
+                .build();
+
+        var session = exitTicketService.launchSession(launchReq, "teacher-01", "Dr. Rao");
+        assertNotNull(session);
+        assertNotNull(session.getId());
+        assertNotNull(session.getSessionPin());
+        assertEquals("ACTIVE", session.getStatus());
+
+        // Student submits response
+        var submitReq = com.schoolerp.modules.academics.dto.SubmitExitTicketResponseRequest.builder()
+                .sessionId(session.getId())
+                .studentId(student.getId())
+                .studentName(student.getFullName())
+                .selectedAnswer("Refractive Index")
+                .confidenceScore(3) // Understood
+                .studentNotes("Understood Snell's law concept clearly")
+                .build();
+
+        var submitResult = exitTicketService.submitResponse(submitReq);
+        assertEquals("RESPONSE_SUBMITTED", submitResult);
+
+        // Teacher checks real-time heatmap
+        var heatmap = exitTicketService.getHeatmap(session.getId());
+        assertNotNull(heatmap);
+        assertEquals(1, heatmap.getTotalResponses());
+        assertEquals(1, heatmap.getUnderstoodCount());
+        assertEquals(100.0, heatmap.getComprehensionRatePercentage());
+        assertEquals("EXCELLENT", heatmap.getComprehensionLevel());
+
+        // Close session
+        var closed = exitTicketService.closeSession(session.getId());
+        assertEquals("CLOSED", closed.getStatus());
+    }
+
+    @Test
+    void testStudentLearningPortfolioAndParentClap() {
+        var student = studentRepository.findAllByTenantId("tenant_apex_mumbai_01").get(0);
+
+        var uploadReq = com.schoolerp.modules.students.dto.SubmitPortfolioArtifactRequest.builder()
+                .studentId(student.getId())
+                .studentName(student.getFullName())
+                .className("Grade 10")
+                .title("Automated Solar Tracker Working Model")
+                .description("Dual-axis LDR servo motorized solar panel tracker for physics science exhibition")
+                .artifactType("PROJECT_PHOTO")
+                .artifactUrl("https://storage.apexacademy.edu.in/portfolio/solar-tracker-model.jpg")
+                .thumbnailUrl("https://storage.apexacademy.edu.in/portfolio/solar-tracker-thumb.jpg")
+                .competencyCategory("SCIENTIFIC_INQUIRY")
+                .build();
+
+        var artifact = learningPortfolioService.uploadArtifact(uploadReq);
+        assertNotNull(artifact);
+        assertNotNull(artifact.getId());
+        assertEquals("SCIENTIFIC_INQUIRY", artifact.getCompetencyCategory());
+        assertEquals(0, artifact.getParentClapsCount());
+
+        // Teacher reviews artifact
+        var reviewReq = com.schoolerp.modules.students.dto.ReviewPortfolioArtifactRequest.builder()
+                .teacherRemarks("Exemplary circuit design and soldering precision. Demonstrated deep understanding of photovoltaics.")
+                .rubricGradeBand("EXEMPLARY")
+                .isFeaturedShowcase(true)
+                .build();
+
+        var reviewed = learningPortfolioService.reviewArtifact(artifact.getId(), reviewReq, "Dr. Vikram Seth");
+        assertNotNull(reviewed);
+        assertEquals("EXEMPLARY", reviewed.getRubricGradeBand());
+        assertTrue(reviewed.isFeaturedShowcase());
+
+        // Parent claps for the child
+        int claps = learningPortfolioService.recordParentClap(artifact.getId());
+        assertEquals(1, claps);
+
+        // Verify retrieval
+        var studentPortfolio = learningPortfolioService.getStudentPortfolio(student.getId());
+        assertFalse(studentPortfolio.isEmpty());
+
+        var featured = learningPortfolioService.getFeaturedShowcase();
+        assertFalse(featured.isEmpty());
+    }
+
+    @Test
+    void testAdaptiveRemedialAndEnrichmentStudyPlans() {
+        var student = studentRepository.findAllByTenantId("tenant_apex_mumbai_01").get(0);
+
+        // 1. Remedial Plan (Score < 50%)
+        var remedialReq = com.schoolerp.modules.academics.dto.GenerateStudyPlanRequest.builder()
+                .studentId(student.getId())
+                .studentName(student.getFullName())
+                .className("Grade 10")
+                .subjectName("Mathematics")
+                .topicOrChapter("Trigonometric Identities")
+                .assessmentScoreTrigger(42.0)
+                .build();
+
+        var remedialPlan = adaptiveStudyPlanService.generateAdaptivePlan(remedialReq);
+        assertNotNull(remedialPlan);
+        assertEquals("REMEDIAL", remedialPlan.getPlanType());
+        assertTrue(remedialPlan.getRecommendedMaterialsSummary().contains("Foundational"));
+        assertEquals("ASSIGNED", remedialPlan.getStatus());
+
+        // Progress update
+        var updateReq = com.schoolerp.modules.academics.dto.UpdateStudyPlanProgressRequest.builder()
+                .completionPercentage(100.0)
+                .status("COMPLETED")
+                .studentNotes("Completed foundational axioms and re-attempted 3 practice proofs.")
+                .build();
+
+        var updated = adaptiveStudyPlanService.updateProgress(remedialPlan.getId(), updateReq);
+        assertEquals("COMPLETED", updated.getStatus());
+        assertEquals(100.0, updated.getCompletionPercentage());
+
+        // 2. Enrichment Plan (Score >= 85%)
+        var enrichReq = com.schoolerp.modules.academics.dto.GenerateStudyPlanRequest.builder()
+                .studentId(student.getId())
+                .studentName(student.getFullName())
+                .className("Grade 10")
+                .subjectName("Physics")
+                .topicOrChapter("Electromagnetic Induction")
+                .assessmentScoreTrigger(94.5)
+                .build();
+
+        var enrichPlan = adaptiveStudyPlanService.generateAdaptivePlan(enrichReq);
+        assertNotNull(enrichPlan);
+        assertEquals("ENRICHMENT", enrichPlan.getPlanType());
+        assertTrue(enrichPlan.getRecommendedMaterialsSummary().contains("Olympiad"));
+    }
+
+    @Test
+    void testClassroomMicroBadgesAndHousePointsCredit() {
+        var student = studentRepository.findAllByTenantId("tenant_apex_mumbai_01").get(0);
+
+        var badgeReq = com.schoolerp.modules.students.dto.AwardBadgeRequest.builder()
+                .studentId(student.getId())
+                .studentName(student.getFullName())
+                .className("Grade 10")
+                .sectionName("Section A")
+                .badgeCode("DEEP_THINKER")
+                .houseName("Mars (Red)")
+                .teacherNotes("Asked a penetrating question connecting Faraday's Law to modern maglev trains")
+                .build();
+
+        var badge = classroomBadgeService.awardBadge(badgeReq, "Sunita Rao");
+        assertNotNull(badge);
+        assertNotNull(badge.getId());
+        assertEquals("DEEP_THINKER", badge.getBadgeCode());
+        assertEquals(20, badge.getHousePointsAwarded());
+        assertTrue(badge.getBadgeTitle().contains("Deep Conceptual Inquiry"));
+
+        // Check student summary
+        var summary = classroomBadgeService.getStudentBadgeSummary(student.getId());
+        assertNotNull(summary);
+        assertTrue(summary.getTotalBadgesCount() >= 1);
+        assertTrue(summary.getTotalHousePointsContributed() >= 20);
+    }
+
+    @Test
+    void testProjectBasedLearningMilestoneWorkflow() {
+        // Teacher creates PBL Project
+        var projReq = com.schoolerp.modules.academics.dto.CreatePblProjectRequest.builder()
+                .title("Clean Energy Smart Microgrid Design")
+                .subjectName("Physics & Environmental Science")
+                .gradeLevel("Grade 10")
+                .description("Design a rooftop solar-hybrid microgrid with battery storage for a model rural health clinic")
+                .totalMilestones(4)
+                .scoringRubric("Proposal (25), Schematic & Math (25), Working Model (25), Viva Defense (25)")
+                .dueDate(java.time.LocalDate.now().plusDays(30))
+                .build();
+
+        var project = pblProjectService.createProject(projReq, "Dr. Vikram Seth");
+        assertNotNull(project);
+        assertNotNull(project.getId());
+        assertEquals(4, project.getTotalMilestones());
+
+        // Group submits Milestone 1
+        var subReq = com.schoolerp.modules.academics.dto.SubmitMilestoneRequest.builder()
+                .projectId(project.getId())
+                .groupName("Eco Innovators")
+                .groupLeaderName("Aarav Sharma")
+                .memberNames("Aarav Sharma, Rhea Patel, Neil Sen")
+                .milestoneNumber(1)
+                .milestoneTitle("Clinic Load Calculation & System Proposal")
+                .submissionUrl("https://storage.apexacademy.edu.in/pbl/eco-innovators-m1-proposal.pdf")
+                .build();
+
+        var submission = pblProjectService.submitMilestone(subReq);
+        assertNotNull(submission);
+        assertEquals(1, submission.getMilestoneNumber());
+        assertEquals("SUBMITTED", submission.getStatus());
+
+        // Teacher grades Milestone 1
+        var gradeReq = com.schoolerp.modules.academics.dto.GradeMilestoneRequest.builder()
+                .teacherScore(24.5)
+                .maxScore(25.0)
+                .peerContributionRating(98.0)
+                .status("APPROVED")
+                .teacherFeedback("Comprehensive load estimation. Excellent consideration of critical medical equipment backup.")
+                .build();
+
+        var graded = pblProjectService.gradeMilestone(submission.getId(), gradeReq, "Dr. Vikram Seth");
+        assertNotNull(graded);
+        assertEquals(24.5, graded.getTeacherScore());
+        assertEquals("APPROVED", graded.getStatus());
+        assertEquals(98.0, graded.getPeerContributionRating());
+
+        // Verify retrieval
+        var submissions = pblProjectService.getProjectSubmissions(project.getId(), "Eco Innovators");
+        assertFalse(submissions.isEmpty());
+        assertEquals(1, submissions.get(0).getMilestoneNumber());
+    }
+
+    @Test
+    void testEmergencyCampusModePivotAndCompleteShutdown() {
+        // 1. Pivot to Virtual Emergency Campus (Cyclone / Red Rain alert)
+        var pivotReq = com.schoolerp.modules.institution.dto.DeclareEmergencyModeRequest.builder()
+                .operatingMode("VIRTUAL_EMERGENCY_CAMPUS")
+                .emergencyReason("CYCLONE_STORM_ALERT")
+                .effectiveDate(java.time.LocalDate.now())
+                .autoNotifyParents(true)
+                .suspendTransportAlerts(true)
+                .freezeLateFeesAndDeadlines(false)
+                .govtOrderReference("DM/MUMBAI/CYCLONE/2026/08")
+                .closureNoticeBulletin("All physical classes suspended due to Cyclone alert. Online classes active.")
+                .build();
+
+        var declared = emergencyCampusModeService.declareEmergencyMode(pivotReq, "Dr. Rajesh Sharma (Principal)");
+        assertNotNull(declared);
+        assertEquals("VIRTUAL_EMERGENCY_CAMPUS", declared.getOperatingMode());
+        assertTrue(declared.isSuspendTransportAlerts());
+        assertTrue(declared.getActiveVirtualRoomsCount() > 0);
+
+        // Verify status
+        var status = emergencyCampusModeService.getCurrentStatus();
+        assertEquals("VIRTUAL_EMERGENCY_CAMPUS", status.getOperatingMode());
+
+        // 2. Worst-Case Disaster Pivot: Complete Emergency Shutdown
+        var shutdownReq = com.schoolerp.modules.institution.dto.DeclareEmergencyModeRequest.builder()
+                .operatingMode("COMPLETE_EMERGENCY_SHUTDOWN")
+                .emergencyReason("CATASTROPHIC_DISASTER")
+                .effectiveDate(java.time.LocalDate.now())
+                .autoNotifyParents(true)
+                .suspendTransportAlerts(true)
+                .freezeLateFeesAndDeadlines(true)
+                .govtOrderReference("STATE/DISASTER/MGMT/ACT/2026/01")
+                .closureNoticeBulletin("Severe regional earthquake and blackout. All school operations, deadlines and fees frozen. Relief desk active.")
+                .build();
+
+        var shutdown = emergencyCampusModeService.declareEmergencyMode(shutdownReq, "Board Chairman");
+        assertNotNull(shutdown);
+        assertEquals("COMPLETE_EMERGENCY_SHUTDOWN", shutdown.getOperatingMode());
+        assertTrue(shutdown.isFreezeLateFeesAndDeadlines());
+
+        // 3. Restore Normal Physical Campus
+        var restored = emergencyCampusModeService.restorePhysicalCampus("Dr. Rajesh Sharma (Principal)");
+        assertEquals("PHYSICAL_CAMPUS", restored.getOperatingMode());
+        assertFalse(restored.isSuspendTransportAlerts());
+    }
+
+    @Test
+    void testEmergencyWelfareSafetyCheckInRegistry() {
+        var student = studentRepository.findAllByTenantId("tenant_apex_mumbai_01").get(0);
+
+        // Student Safe at Home
+        var checkIn1 = com.schoolerp.modules.institution.dto.SubmitSafetyCheckInRequest.builder()
+                .userId(student.getId())
+                .userName(student.getFullName())
+                .userRole("STUDENT")
+                .safetyStatus("SAFE_AT_HOME")
+                .currentLocation("Powai, Mumbai")
+                .emergencyContactPhone("+91 98201 11223")
+                .assistanceDetails("Safe with family; power inverter running")
+                .build();
+
+        var res1 = emergencyCampusModeService.submitSafetyCheckIn(checkIn1);
+        assertNotNull(res1);
+        assertEquals("SAFE_AT_HOME", res1.getSafetyStatus());
+
+        // Staff Needing Urgent Assistance
+        var checkIn2 = com.schoolerp.modules.institution.dto.SubmitSafetyCheckInRequest.builder()
+                .userId(java.util.UUID.randomUUID())
+                .userName("Mr. Ranveer Singh")
+                .userRole("STAFF")
+                .safetyStatus("NEED_URGENT_ASSISTANCE")
+                .currentLocation("Sector 4, Ground Floor Flooded")
+                .emergencyContactPhone("+91 98205 99881")
+                .assistanceDetails("Water level rising above 3 feet. Require emergency evacuation boat.")
+                .build();
+
+        var res2 = emergencyCampusModeService.submitSafetyCheckIn(checkIn2);
+        assertNotNull(res2);
+        assertEquals("NEED_URGENT_ASSISTANCE", res2.getSafetyStatus());
+
+        // Summary
+        var summary = emergencyCampusModeService.getSafetyCheckInSummary();
+        assertNotNull(summary);
+        assertTrue(summary.getTotalCheckIns() >= 2);
+        assertTrue(summary.getNeedUrgentAssistanceCount() >= 1);
+        assertFalse(summary.getUrgentCases().isEmpty());
+    }
+
+    @Test
+    void testAutoGenerateVirtualClassroomsAndSessionLifecycle() {
+        var periods = java.util.List.of(
+                com.schoolerp.modules.academics.dto.AutoGenerateVirtualSessionsRequest.PeriodScheduleItemDTO.builder()
+                        .periodNumber(1)
+                        .subjectName("Mathematics")
+                        .teacherName("Sunita Rao")
+                        .startTime("09:00")
+                        .endTime("09:45")
+                        .build(),
+                com.schoolerp.modules.academics.dto.AutoGenerateVirtualSessionsRequest.PeriodScheduleItemDTO.builder()
+                        .periodNumber(2)
+                        .subjectName("Physics")
+                        .teacherName("Dr. Vikram Seth")
+                        .startTime("10:00")
+                        .endTime("10:45")
+                        .build()
+        );
+
+        var req = com.schoolerp.modules.academics.dto.AutoGenerateVirtualSessionsRequest.builder()
+                .className("Grade 10")
+                .sectionName("A")
+                .meetingProvider("JITSI_WEBRTC")
+                .sessionDate(java.time.LocalDate.now())
+                .periods(periods)
+                .build();
+
+        var generated = virtualClassroomService.autoGenerateDailySessions(req);
+        assertNotNull(generated);
+        assertEquals(2, generated.size());
+        assertTrue(generated.get(0).getJoinMeetingUrl().contains("meet.jit.si"));
+        assertEquals("SCHEDULED", generated.get(0).getSessionStatus());
+
+        // Start Period 1
+        var p1 = generated.get(0);
+        var started = virtualClassroomService.startSession(p1.getId());
+        assertEquals("LIVE_IN_PROGRESS", started.getSessionStatus());
+        assertNotNull(started.getStartedAt());
+
+        // End Period 1 with recording
+        var ended = virtualClassroomService.endSession(p1.getId(), "https://storage.apexacademy.edu.in/recordings/math-g10a-p1.mp4");
+        assertEquals("CONCLUDED", ended.getSessionStatus());
+        assertNotNull(ended.getRecordingUrl());
+
+        // Feed retrieval
+        var feed = virtualClassroomService.getStudentDailyFeed("Grade 10", "A", java.time.LocalDate.now());
+        assertFalse(feed.isEmpty());
+    }
+
+    @Test
+    void testVirtualAttendanceTelemetryAndAsyncCatchupNormalization() {
+        var student = studentRepository.findAllByTenantId("tenant_apex_mumbai_01").get(0);
+
+        // Generate a test virtual session
+        var periods = java.util.List.of(
+                com.schoolerp.modules.academics.dto.AutoGenerateVirtualSessionsRequest.PeriodScheduleItemDTO.builder()
+                        .periodNumber(3)
+                        .subjectName("Chemistry")
+                        .teacherName("Ms. Kapoor")
+                        .startTime("11:00")
+                        .endTime("11:45")
+                        .build()
+        );
+        var genReq = com.schoolerp.modules.academics.dto.AutoGenerateVirtualSessionsRequest.builder()
+                .className("Grade 10")
+                .sectionName("A")
+                .meetingProvider("JITSI_WEBRTC")
+                .sessionDate(java.time.LocalDate.now())
+                .periods(periods)
+                .build();
+        var sessions = virtualClassroomService.autoGenerateDailySessions(genReq);
+        var session = sessions.get(0);
+
+        // 1. Log Virtual Presence >= 70% duration -> PRESENT_VIRTUAL
+        var presReq = com.schoolerp.modules.attendance.dto.LogVirtualPresenceRequest.builder()
+                .sessionId(session.getId())
+                .studentId(student.getId())
+                .studentName(student.getFullName())
+                .className("Grade 10")
+                .sessionScheduledDurationMinutes(45)
+                .activeDurationMinutes(38) // >70%
+                .connectionHealthScore(95)
+                .build();
+
+        var telemetry = virtualAttendanceService.logPresence(presReq);
+        assertNotNull(telemetry);
+        assertEquals("PRESENT_VIRTUAL", telemetry.getAttendanceStatus());
+        assertEquals(38, telemetry.getActiveDurationMinutes());
+
+        // Check Roster
+        var roster = virtualAttendanceService.getSessionAttendanceRoster(session.getId());
+        assertNotNull(roster);
+        assertEquals(1, roster.getTotalAttendees());
+        assertEquals(1, roster.getPresentVirtualCount());
+
+        // 2. Student Submits Asynchronous Catch-Up (e.g. for low-bandwidth student)
+        var catchupReq = com.schoolerp.modules.academics.dto.SubmitAsyncCatchupRequest.builder()
+                .sessionId(session.getId())
+                .studentId(student.getId())
+                .studentName(student.getFullName())
+                .materialReviewedTitle("Class Recording & Chemical Bonding Notes")
+                .proofOfLearningResponseText("Watched complete 35-min lecture recording. Answered quiz on ionic vs covalent dipole moments.")
+                .quizScore(95.0)
+                .build();
+
+        var catchup = virtualClassroomService.submitAsyncCatchup(catchupReq);
+        assertNotNull(catchup);
+        assertEquals("SUBMITTED", catchup.getStatus());
+
+        // Teacher verifies catchup -> Normalizes attendance
+        var verified = virtualClassroomService.verifyAsyncCatchup(catchup.getId(), "Ms. Kapoor");
+        assertEquals("VERIFIED_ATTENDANCE_NORMALIZED", verified.getStatus());
+        assertNotNull(verified.getVerifiedByTeacherName());
     }
 }
 

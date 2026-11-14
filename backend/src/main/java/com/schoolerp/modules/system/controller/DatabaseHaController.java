@@ -51,3 +51,4 @@ public class DatabaseHaController {
         return ResponseEntity.ok(ApiResponse.ok("Cluster topology reset to normal HA state", status));
     }
 }
+

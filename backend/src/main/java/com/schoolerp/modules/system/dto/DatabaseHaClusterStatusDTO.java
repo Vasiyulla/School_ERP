@@ -32,3 +32,4 @@ public class DatabaseHaClusterStatusDTO {
     private String rpoTarget; // "0 seconds (Zero data loss)"
     private String rtoTarget; // "< 3 seconds (Automated promotion)"
 }
+
