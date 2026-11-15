@@ -2,8 +2,11 @@ package com.schoolerp.modules.operations.service;
 
 import com.schoolerp.common.context.TenantContext;
 import com.schoolerp.modules.communication.service.CommunicationService;
+import com.schoolerp.modules.operations.dto.*;
 import com.schoolerp.modules.operations.entity.*;
 import com.schoolerp.modules.operations.repository.*;
+import com.schoolerp.modules.students.entity.Student;
+import com.schoolerp.modules.students.repository.StudentRepository;
 import com.schoolerp.modules.system.service.AuditLogService;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -31,6 +34,14 @@ public class OperationsService {
     private final BookIssueRecordRepository bookIssueRecordRepository;
     private final CommunicationService communicationService;
     private final AuditLogService auditLogService;
+    private final HostelRoomRepository hostelRoomRepository;
+    private final HostelAllocationRepository hostelAllocationRepository;
+    private final HostelRollCallRepository hostelRollCallRepository;
+    private final HostelExeatPassRepository hostelExeatPassRepository;
+    private final CampusVisitorRepository campusVisitorRepository;
+    private final VehicleFuelLogRepository vehicleFuelLogRepository;
+    private final VehicleComplianceSentinelRepository vehicleComplianceSentinelRepository;
+    private final StudentRepository studentRepository;
 
     // --- Transport Operations & Samsara-Style Telematics ---
 

@@ -46,6 +46,9 @@ class SchoolErpApplicationTests {
     private com.schoolerp.modules.students.repository.StudentRepository studentRepository;
 
     @Autowired
+    private com.schoolerp.modules.students.service.StudentService studentService;
+
+    @Autowired
     private com.schoolerp.modules.operations.repository.BookIssueRecordRepository bookIssueRecordRepository;
 
     @Autowired
@@ -116,6 +119,9 @@ class SchoolErpApplicationTests {
 
     @Autowired
     private com.schoolerp.modules.admissions.service.RteQuotaService rteQuotaService;
+
+    @Autowired
+    private com.schoolerp.modules.admissions.service.AdmissionsCrmService admissionsCrmService;
 
     @Autowired
     private com.schoolerp.modules.examinations.service.CbseLocService cbseLocService;
@@ -254,6 +260,21 @@ class SchoolErpApplicationTests {
 
     @Autowired
     private com.schoolerp.modules.attendance.service.VirtualAttendanceService virtualAttendanceService;
+
+    @Autowired
+    private com.schoolerp.modules.system.service.CustomEntityExtensibilityService customExtensibilityService;
+
+    @Autowired
+    private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private org.springframework.cache.CacheManager cacheManager;
+
+    @Autowired
+    private com.schoolerp.modules.system.service.AuditLogService auditLogService;
+
+    @Autowired
+    private com.schoolerp.modules.operations.repository.VehicleRepository vehicleRepository;
 
     @BeforeEach
     void setUp() {
@@ -2582,6 +2603,977 @@ class SchoolErpApplicationTests {
         var verified = virtualClassroomService.verifyAsyncCatchup(catchup.getId(), "Ms. Kapoor");
         assertEquals("VERIFIED_ATTENDANCE_NORMALIZED", verified.getStatus());
         assertNotNull(verified.getVerifiedByTeacherName());
+    }
+
+    @Test
+    void testDynamicCustomFieldDefinitionsAndValues() {
+        var student = studentRepository.findAllByTenantId("tenant_apex_mumbai_01").get(0);
+
+        // 1. Create Custom Field Definition on STUDENT entity
+        var fieldDefReq = com.schoolerp.modules.system.dto.CreateCustomFieldDefinitionRequest.builder()
+                .targetEntityType("STUDENT")
+                .fieldCode("swimming_belt_level")
+                .fieldLabel("Swimming Belt Level")
+                .fieldType("DROPDOWN")
+                .options(java.util.List.of("Beginner White", "Intermediate Blue", "Advanced Gold"))
+                .defaultValue("Beginner White")
+                .isMandatory(false)
+                .displayOrder(1)
+                .build();
+
+        var fieldDef = customExtensibilityService.createFieldDefinition(fieldDefReq);
+        assertNotNull(fieldDef);
+        assertNotNull(fieldDef.getId());
+        assertEquals("swimming_belt_level", fieldDef.getFieldCode());
+        assertEquals("DROPDOWN", fieldDef.getFieldType());
+
+        // 2. Save Custom Field Values for Student
+        var saveValReq = com.schoolerp.modules.system.dto.SaveCustomFieldValueRequest.builder()
+                .targetEntityType("STUDENT")
+                .targetEntityId(student.getId())
+                .fieldValues(java.util.Map.of("swimming_belt_level", "Advanced Gold"))
+                .build();
+
+        customExtensibilityService.saveCustomFieldValues(saveValReq);
+
+        // 3. Retrieve Entity Custom Fields
+        var response = customExtensibilityService.getEntityCustomFields("STUDENT", student.getId());
+        assertNotNull(response);
+        assertEquals("Advanced Gold", response.getCustomFieldValues().get("swimming_belt_level"));
+        assertTrue(response.getFieldMetadata().containsKey("swimming_belt_level"));
+    }
+
+    @Test
+    void testUniversalCustomEntityCreationAndDynamicRecordsLifecycle() {
+        // 1. Define completely new custom business entity: MUN_DELEGATION
+        var schemaFields = java.util.List.<java.util.Map<String, Object>>of(
+                java.util.Map.of("name", "countryName", "type", "TEXT", "label", "Country Assigned", "required", true),
+                java.util.Map.of("name", "committee", "type", "DROPDOWN", "label", "UN Committee", "options", java.util.List.of("Security Council", "UNHRC", "DISEC")),
+                java.util.Map.of("name", "delegateStudentName", "type", "TEXT", "label", "Delegate Name", "required", true),
+                java.util.Map.of("name", "positionPaperSubmitted", "type", "BOOLEAN", "label", "Position Paper Submitted", "required", false)
+        );
+
+        var entityDefReq = com.schoolerp.modules.system.dto.CreateCustomEntityDefinitionRequest.builder()
+                .entityCode("MUN_DELEGATION")
+                .displayName("Model UN Country Delegation")
+                .pluralName("Model UN Delegations")
+                .description("Model United Nations delegation allocations, draft resolutions, and position papers")
+                .category("ACTIVITIES")
+                .iconName("Globe")
+                .fieldsSchema(schemaFields)
+                .build();
+
+        var entityDef = customExtensibilityService.createEntityDefinition(entityDefReq);
+        assertNotNull(entityDef);
+        assertEquals("MUN_DELEGATION", entityDef.getEntityCode());
+        assertEquals("ACTIVITIES", entityDef.getCategory());
+
+        // 2. Create Dynamic Record Instance
+        var recordData = java.util.Map.<String, Object>of(
+                "countryName", "United States of America",
+                "committee", "Security Council",
+                "delegateStudentName", "Aarav Sharma",
+                "positionPaperSubmitted", true
+        );
+
+        var createRecReq = com.schoolerp.modules.system.dto.CreateCustomEntityRecordRequest.builder()
+                .recordTitle("USA - UN Security Council")
+                .data(recordData)
+                .build();
+
+        var record = customExtensibilityService.createEntityRecord("MUN_DELEGATION", createRecReq, "Dr. Vikram Seth");
+        assertNotNull(record);
+        assertNotNull(record.getId());
+        assertEquals("USA - UN Security Council", record.getRecordTitle());
+        assertEquals("ACTIVE", record.getStatus());
+        assertEquals("United States of America", record.getData().get("countryName"));
+
+        // 3. Query records
+        var list = customExtensibilityService.listEntityRecords("MUN_DELEGATION", "ACTIVE");
+        assertFalse(list.isEmpty());
+        assertTrue(list.stream().anyMatch(r -> r.getId().equals(record.getId())));
+
+        // 4. Update record
+        var updateReq = com.schoolerp.modules.system.dto.UpdateCustomEntityRecordRequest.builder()
+                .recordTitle("USA - UN Security Council (Draft Resolution Sponsor)")
+                .status("ACTIVE")
+                .data(java.util.Map.of("countryName", "United States of America", "committee", "Security Council", "resolutionDraftNo", "UNSC-RES-2026-04"))
+                .build();
+
+        var updated = customExtensibilityService.updateEntityRecord("MUN_DELEGATION", record.getId(), updateReq);
+        assertEquals("USA - UN Security Council (Draft Resolution Sponsor)", updated.getRecordTitle());
+
+        // 5. Delete (Archive) record
+        customExtensibilityService.deleteEntityRecord("MUN_DELEGATION", record.getId());
+        var archivedRec = customExtensibilityService.getEntityRecord("MUN_DELEGATION", record.getId());
+        assertEquals("ARCHIVED", archivedRec.getStatus());
+    }
+
+    @Test
+    void testTenantOutboundWebhookSubscriptionAndDispatch() {
+        // 1. Create Webhook Subscription
+        var webhookReq = com.schoolerp.modules.system.dto.CreateWebhookSubscriptionRequest.builder()
+                .webhookName("Zapier External MUN & Events Pipeline")
+                .targetUrl("https://hooks.zapier.com/hooks/catch/98201/schoolerp-events/")
+                .eventTopic("CUSTOM_ENTITY_RECORD_CREATED")
+                .secretKey("whsec_apex_mun_secret_key_8829")
+                .build();
+
+        var webhook = customExtensibilityService.createWebhook(webhookReq);
+        assertNotNull(webhook);
+        assertNotNull(webhook.getId());
+        assertEquals("CUSTOM_ENTITY_RECORD_CREATED", webhook.getEventTopic());
+        assertTrue(webhook.isActive());
+
+        // 2. Test Ping Dispatch
+        var pingResult = customExtensibilityService.testPingWebhook(webhook.getId());
+        assertNotNull(pingResult);
+        assertEquals("SUCCESS_200", pingResult.getDeliveryStatus());
+        assertEquals(200, pingResult.getHttpStatusCode());
+        assertNotNull(pingResult.getHmacSignature());
+    }
+
+    @Test
+    void testArgon2idCryptographicPasswordEncoder() {
+        String rawPassword = "ApexSchoolEnterprise2026!";
+        String encodedHash = passwordEncoder.encode(rawPassword);
+
+        assertNotNull(encodedHash);
+        assertTrue(encodedHash.startsWith("$argon2id$"), "Password hash must follow Argon2id standard format");
+        assertTrue(passwordEncoder.matches(rawPassword, encodedHash), "Valid password must verify against Argon2id hash");
+        assertFalse(passwordEncoder.matches("WrongPassword!123", encodedHash), "Invalid password must fail Argon2id check");
+    }
+
+    @Test
+    void testEnterpriseSpringCachingEngine() {
+        assertNotNull(cacheManager);
+        var cache = cacheManager.getCache("tenantLicenses");
+        assertNotNull(cache, "tenantLicenses cache must be configured");
+
+        // Verify module lookup
+        boolean isEnabledFirst = licenseService.isModuleEnabled("tenant_apex_mumbai_01", "CORE_ACADEMICS");
+        assertTrue(isEnabledFirst);
+
+        // Verify cache entry is populated
+        var cachedVal = cache.get("tenant_apex_mumbai_01_CORE_ACADEMICS");
+        assertNotNull(cachedVal, "Cache should store the module license boolean");
+        assertEquals(Boolean.TRUE, cachedVal.get());
+
+        // Verify feature flag caching
+        var featCache = cacheManager.getCache("tenantFeatures");
+        assertNotNull(featCache, "tenantFeatures cache must be configured");
+        boolean isFeatEnabled = featureFlagService.isFeatureEnabled("transport.live_gps_telemetry");
+        assertNotNull(featCache.get("transport.live_gps_telemetry"));
+    }
+
+    @Test
+    void testPaginationAuditLogsAndStudentDirectories() {
+        // 1. Test Paged Audit Logs
+        var pagedLogs = auditLogService.getPagedLogs(0, 5);
+        assertNotNull(pagedLogs);
+        assertEquals(0, pagedLogs.getNumber());
+        assertTrue(pagedLogs.getSize() <= 5);
+        assertTrue(pagedLogs.getTotalElements() > 0);
+        assertFalse(pagedLogs.getContent().isEmpty());
+
+        // 2. Test Paged Students Directory
+        var pagedStudents = studentService.getPagedStudents(0, 3);
+        assertNotNull(pagedStudents);
+        assertEquals(0, pagedStudents.getNumber());
+        assertTrue(pagedStudents.getSize() <= 3);
+        assertTrue(pagedStudents.getTotalElements() > 0);
+        assertFalse(pagedStudents.getContent().isEmpty());
+    }
+
+    @Test
+    void testExpressWalkInIntakeAndSpotFeeCollection() {
+        TenantContext.setTenantId("tenant_apex_mumbai_01");
+
+        // 1. Rapid Walk-In Desk Registration
+        var intakeReq = com.schoolerp.modules.admissions.dto.RapidWalkInIntakeRequest.builder()
+                .parentName("Vikram Malhotra")
+                .parentPhone("+91-9876543210")
+                .parentEmail("vikram.malhotra@apex.edu")
+                .studentName("Aarav Malhotra")
+                .gradeApplyingFor("Grade 6")
+                .academicYear("2026-2027")
+                .hasEnrolledSibling(true)
+                .proximityUnderFiveKm(true)
+                .assignedCounselorName("Pooja Sharma")
+                .initialNotes("Arrived at 10 AM. Interested in STEM robotics club.")
+                .build();
+
+        var inquiry = admissionsCrmService.rapidWalkInIntake("tenant_apex_mumbai_01", intakeReq);
+        assertNotNull(inquiry);
+        assertNotNull(inquiry.getId());
+        assertTrue(inquiry.getInquiryNumber().startsWith("INQ-2026-W"));
+        assertTrue(inquiry.getTokenNumber().startsWith("TOKEN-W"));
+        assertEquals("INQUIRY_RECEIVED", inquiry.getPipelineStage());
+        assertEquals("WALK_IN", inquiry.getSourceChannel());
+        assertTrue(inquiry.getLeadScore() >= 80, "Walk-in lead score with sibling and proximity should be >= 80");
+        assertEquals(BigDecimal.ZERO, inquiry.getSpotFeePaidAmount());
+
+        // 2. Spot Prospectus Fee Collection
+        var spotFeeReq = com.schoolerp.modules.admissions.dto.CollectSpotFeeRequest.builder()
+                .amount(new BigDecimal("1500.00"))
+                .paymentMethod("UPI_QR")
+                .remarks("Walk-in registration prospectus charge")
+                .build();
+
+        var updatedInquiry = admissionsCrmService.collectSpotFee("tenant_apex_mumbai_01", inquiry.getId(), spotFeeReq);
+        assertNotNull(updatedInquiry);
+        assertEquals(new BigDecimal("1500.00"), updatedInquiry.getSpotFeePaidAmount());
+        assertNotNull(updatedInquiry.getSpotFeeReceiptNumber());
+        assertTrue(updatedInquiry.getSpotFeeReceiptNumber().startsWith("REC-2026-"));
+        assertEquals("APPLICATION_SUBMITTED", updatedInquiry.getPipelineStage());
+        assertTrue(updatedInquiry.getCounselorNotes().contains("Spot Fee Paid: Rs.1500.00 via UPI_QR"));
+    }
+
+    @Test
+    void testAdmissionsInterviewSlotBookingAndEvaluation() {
+        TenantContext.setTenantId("tenant_apex_mumbai_01");
+
+        // 1. Create Inquiry
+        var inqReq = com.schoolerp.modules.admissions.dto.CreateInquiryRequest.builder()
+                .parentName("Anita Sharma")
+                .parentPhone("+91-9876500001")
+                .parentEmail("anita.sharma@apex.edu")
+                .studentName("Rhea Sharma")
+                .gradeApplyingFor("Grade 8")
+                .academicYear("2026-2027")
+                .sourceChannel("WEBSITE_FORM")
+                .hasEnrolledSibling(false)
+                .proximityUnderFiveKm(true)
+                .assignedCounselorName("Deepak Gupta")
+                .counselorNotes("Campus tour requested")
+                .build();
+
+        var inq = admissionsCrmService.createInquiry("tenant_apex_mumbai_01", inqReq);
+        assertNotNull(inq);
+
+        // 2. Book Interview Slot
+        var slotReq = com.schoolerp.modules.admissions.dto.BookInterviewSlotRequest.builder()
+                .inquiryId(inq.getId())
+                .slotType("CAMPUS_TOUR")
+                .scheduledAt(java.time.LocalDateTime.now().plusDays(2))
+                .interviewerName("Mr. Rajan Verma")
+                .venueOrRoom("STEM Labs & Library")
+                .build();
+
+        var slot = admissionsCrmService.bookInterviewSlot("tenant_apex_mumbai_01", slotReq);
+        assertNotNull(slot);
+        assertNotNull(slot.getId());
+        assertEquals("CAMPUS_TOUR", slot.getSlotType());
+        assertEquals("SCHEDULED", slot.getStatus());
+
+        // Verify inquiry stage advanced
+        var inqAfterSlot = admissionsCrmService.getInquiryById("tenant_apex_mumbai_01", inq.getId());
+        assertEquals("CAMPUS_TOUR_BOOKED", inqAfterSlot.getPipelineStage());
+
+        // 3. Evaluate Slot Rubric
+        var evalReq = com.schoolerp.modules.admissions.dto.EvaluateInterviewSlotRequest.builder()
+                .status("COMPLETED")
+                .evaluationRating(5)
+                .interviewerFeedback("Exceptional curiosity and articulate responses.")
+                .recommendedGrade("Grade 8")
+                .build();
+
+        var evaluatedSlot = admissionsCrmService.evaluateInterviewSlot("tenant_apex_mumbai_01", slot.getId(), evalReq);
+        assertNotNull(evaluatedSlot);
+        assertEquals("COMPLETED", evaluatedSlot.getStatus());
+        assertEquals(5, evaluatedSlot.getEvaluationRating());
+        assertEquals("Exceptional curiosity and articulate responses.", evaluatedSlot.getInterviewerFeedback());
+    }
+
+    @Test
+    void testMeritOfferIssuanceAndStudentConversion() {
+        TenantContext.setTenantId("tenant_apex_mumbai_01");
+
+        // 1. Create Inquiry and Pay Spot Fee
+        var walkInReq = com.schoolerp.modules.admissions.dto.RapidWalkInIntakeRequest.builder()
+                .parentName("Suresh Nair")
+                .parentPhone("+91-9876599999")
+                .parentEmail("suresh.nair@apex.edu")
+                .studentName("Ananya Nair")
+                .gradeApplyingFor("Grade 5")
+                .academicYear("2026-2027")
+                .hasEnrolledSibling(true)
+                .proximityUnderFiveKm(true)
+                .assignedCounselorName("Rohan Mehta")
+                .initialNotes("Walk-in registration at admission desk")
+                .build();
+
+        var inq = admissionsCrmService.rapidWalkInIntake("tenant_apex_mumbai_01", walkInReq);
+        admissionsCrmService.collectSpotFee("tenant_apex_mumbai_01", inq.getId(),
+                com.schoolerp.modules.admissions.dto.CollectSpotFeeRequest.builder()
+                        .amount(new BigDecimal("1500.00"))
+                        .paymentMethod("UPI_QR")
+                        .remarks("Prospectus fee")
+                        .build());
+
+        // 2. Issue Merit Offer
+        var offerReq = com.schoolerp.modules.admissions.dto.IssueOfferRequest.builder()
+                .inquiryId(inq.getId())
+                .tuitionFeeTotal(new BigDecimal("80000.00"))
+                .scholarshipOrConcessionAmount(new BigDecimal("10000.00"))
+                .validUntilDate(java.time.LocalDate.now().plusDays(14))
+                .build();
+
+        var offer = admissionsCrmService.issueMeritOffer("tenant_apex_mumbai_01", offerReq);
+        assertNotNull(offer);
+        assertNotNull(offer.getId());
+        assertTrue(offer.getOfferNumber().startsWith("OFFER-2026-"));
+        assertEquals(new BigDecimal("70000.00"), offer.getNetAdmissionPayable());
+        assertEquals("ISSUED", offer.getOfferStatus());
+
+        var inqWithOffer = admissionsCrmService.getInquiryById("tenant_apex_mumbai_01", inq.getId());
+        assertEquals("OFFER_ISSUED", inqWithOffer.getPipelineStage());
+
+        // 3. 1-Click Convert Offer to Active Student & Invoice
+        var converted = admissionsCrmService.convertToActiveStudent("tenant_apex_mumbai_01", offer.getId());
+        assertNotNull(converted);
+        assertEquals("CONVERTED_TO_STUDENT", converted.getOfferStatus());
+        assertNotNull(converted.getConvertedStudentId());
+        assertNotNull(converted.getConvertedInvoiceId());
+        assertNotNull(converted.getAcceptedAt());
+
+        // Verify Student in Database
+        var studentOpt = studentRepository.findById(converted.getConvertedStudentId());
+        assertTrue(studentOpt.isPresent());
+        assertEquals("Ananya Nair", studentOpt.get().getFullName());
+        assertEquals("Grade 5", studentOpt.get().getClassName());
+        assertEquals("Active", studentOpt.get().getStatus());
+
+        // Verify Invoice in Database
+        var invoiceOpt = feeInvoiceRepository.findById(converted.getConvertedInvoiceId());
+        assertTrue(invoiceOpt.isPresent());
+        assertEquals(new BigDecimal("70000.00"), invoiceOpt.get().getTotalAmount());
+        assertEquals(new BigDecimal("1500.00"), invoiceOpt.get().getPaidAmount());
+        assertEquals(new BigDecimal("68500.00"), invoiceOpt.get().getBalanceAmount());
+
+        // Verify Inquiry Enrolled Status
+        var finalInquiry = admissionsCrmService.getInquiryById("tenant_apex_mumbai_01", inq.getId());
+        assertEquals("ENROLLED", finalInquiry.getPipelineStage());
+        assertEquals(100, finalInquiry.getLeadScore());
+
+        // 4. Verify Funnel Analytics
+        var funnel = admissionsCrmService.getFunnelAnalytics("tenant_apex_mumbai_01");
+        assertNotNull(funnel);
+        assertTrue(funnel.getTotalInquiries() >= 2);
+        assertTrue(funnel.getWalkInCount() >= 2);
+        assertTrue(funnel.getSpotFeesCollectedTotal().compareTo(BigDecimal.ZERO) > 0);
+        assertTrue(funnel.getStudentsEnrolledCount() >= 1);
+        assertTrue(funnel.getConversionRatePercent() > 0.0);
+    }
+
+    @Test
+    void testParentDocumentChecklistUploadAndVerificationWorkflow() {
+        TenantContext.setTenantId("tenant_apex_mumbai_01");
+
+        // 1. Create Inquiry
+        var inq = admissionsCrmService.rapidWalkInIntake("tenant_apex_mumbai_01",
+                com.schoolerp.modules.admissions.dto.RapidWalkInIntakeRequest.builder()
+                        .parentName("Karan Kapoor")
+                        .parentPhone("+91-9822012345")
+                        .parentEmail("karan.kapoor@apex.edu")
+                        .studentName("Dev Kapoor")
+                        .gradeApplyingFor("Grade 1")
+                        .academicYear("2026-2027")
+                        .build());
+
+        // 2. Upload Checklist Documents
+        var birthDoc = admissionsCrmService.uploadChecklistDocument("tenant_apex_mumbai_01", inq.getId(),
+                com.schoolerp.modules.admissions.dto.UploadDocumentRequest.builder()
+                        .documentType("BIRTH_CERTIFICATE")
+                        .documentName("Dev_Kapoor_BirthCert.pdf")
+                        .storageUrl("https://s3.ap-south-1.amazonaws.com/apex-admissions/birth_cert.pdf")
+                        .build());
+
+        var tcDoc = admissionsCrmService.uploadChecklistDocument("tenant_apex_mumbai_01", inq.getId(),
+                com.schoolerp.modules.admissions.dto.UploadDocumentRequest.builder()
+                        .documentType("TRANSFER_CERTIFICATE")
+                        .documentName("Dev_Kapoor_TC.pdf")
+                        .storageUrl("https://s3.ap-south-1.amazonaws.com/apex-admissions/tc.pdf")
+                        .build());
+
+        assertEquals("UNDER_REVIEW", birthDoc.getStatus());
+        assertEquals("UNDER_REVIEW", tcDoc.getStatus());
+
+        // 3. Officer Verification
+        var verifiedBirth = admissionsCrmService.verifyChecklistDocument("tenant_apex_mumbai_01", birthDoc.getId(),
+                com.schoolerp.modules.admissions.dto.VerifyDocumentRequest.builder()
+                        .status("VERIFIED")
+                        .verifiedByName("Officer Siddharth")
+                        .build());
+        assertEquals("VERIFIED", verifiedBirth.getStatus());
+
+        var rejectedTc = admissionsCrmService.verifyChecklistDocument("tenant_apex_mumbai_01", tcDoc.getId(),
+                com.schoolerp.modules.admissions.dto.VerifyDocumentRequest.builder()
+                        .status("REJECTED_REUPLOAD_REQUIRED")
+                        .rejectionReason("Seal on Page 2 is missing. Please re-upload verified copy.")
+                        .verifiedByName("Officer Siddharth")
+                        .build());
+        assertEquals("REJECTED_REUPLOAD_REQUIRED", rejectedTc.getStatus());
+        assertEquals("Seal on Page 2 is missing. Please re-upload verified copy.", rejectedTc.getRejectionReason());
+
+        // 4. Parent Public Tracking Dossier
+        var tracker = admissionsCrmService.getPublicTrackingStatus("tenant_apex_mumbai_01", inq.getInquiryNumber(), "9822012345");
+        assertNotNull(tracker);
+        assertEquals(inq.getInquiryNumber(), tracker.getInquiryNumber());
+        assertEquals(1, tracker.getVerifiedDocsCount());
+        assertTrue(tracker.getChecklistDocuments().size() >= 2);
+
+        // 5. Parent Re-uploads Corrected TC Document
+        var reuploadedTc = admissionsCrmService.uploadChecklistDocument("tenant_apex_mumbai_01", inq.getId(),
+                com.schoolerp.modules.admissions.dto.UploadDocumentRequest.builder()
+                        .documentType("TRANSFER_CERTIFICATE")
+                        .documentName("Dev_Kapoor_TC_Signed.pdf")
+                        .storageUrl("https://s3.ap-south-1.amazonaws.com/apex-admissions/tc_signed.pdf")
+                        .build());
+        assertEquals("UNDER_REVIEW", reuploadedTc.getStatus());
+        assertNull(reuploadedTc.getRejectionReason());
+    }
+
+    @Test
+    void testGradeCapacityAndAutomatedWaitlistPromotion() {
+        TenantContext.setTenantId("tenant_apex_mumbai_01");
+
+        // 1. Configure Grade 11-Science Capacity (2 Seats total)
+        var capReq = com.schoolerp.modules.admissions.dto.ConfigureCapacityRequest.builder()
+                .academicYear("2026-2027")
+                .gradeName("Grade 11-Science")
+                .totalSanctionedSeats(2)
+                .generalQuotaSeats(2)
+                .build();
+
+        var cap = admissionsCrmService.configureGradeCapacity("tenant_apex_mumbai_01", capReq);
+        assertNotNull(cap);
+        assertEquals(2, cap.getTotalSanctionedSeats());
+        assertEquals(2, cap.getAvailableSeats());
+
+        // 2. Candidate Inquiries
+        var inq1 = admissionsCrmService.createInquiry("tenant_apex_mumbai_01",
+                com.schoolerp.modules.admissions.dto.CreateInquiryRequest.builder()
+                        .parentName("Aditya Bose")
+                        .parentPhone("+91-9833011111")
+                        .studentName("Rohit Bose")
+                        .gradeApplyingFor("Grade 11-Science")
+                        .academicYear("2026-2027")
+                        .build());
+
+        var inq2 = admissionsCrmService.createInquiry("tenant_apex_mumbai_01",
+                com.schoolerp.modules.admissions.dto.CreateInquiryRequest.builder()
+                        .parentName("Manish Dave")
+                        .parentPhone("+91-9833022222")
+                        .studentName("Tanvi Dave")
+                        .gradeApplyingFor("Grade 11-Science")
+                        .academicYear("2026-2027")
+                        .build());
+
+        // Issue offers to candidate 1 & 2 -> Fills capacity!
+        admissionsCrmService.issueMeritOffer("tenant_apex_mumbai_01",
+                com.schoolerp.modules.admissions.dto.IssueOfferRequest.builder().inquiryId(inq1.getId()).build());
+        admissionsCrmService.issueMeritOffer("tenant_apex_mumbai_01",
+                com.schoolerp.modules.admissions.dto.IssueOfferRequest.builder().inquiryId(inq2.getId()).build());
+
+        var updatedCapList = admissionsCrmService.getGradeCapacities("tenant_apex_mumbai_01", "2026-2027");
+        var sciCap = updatedCapList.stream().filter(c -> "Grade 11-Science".equals(c.getGradeName())).findFirst().orElseThrow();
+        assertEquals(2, sciCap.getActiveOffersCount());
+
+        // 3. 3rd Candidate arrives -> Waitlisted
+        var inq3 = admissionsCrmService.createInquiry("tenant_apex_mumbai_01",
+                com.schoolerp.modules.admissions.dto.CreateInquiryRequest.builder()
+                        .parentName("Vivek Roy")
+                        .parentPhone("+91-9833033333")
+                        .studentName("Sanya Roy")
+                        .gradeApplyingFor("Grade 11-Science")
+                        .academicYear("2026-2027")
+                        .build());
+        admissionsCrmService.updatePipelineStage("tenant_apex_mumbai_01", inq3.getId(), "WAITLISTED", "Waitlisted due to zero open general seats", null);
+
+        var capCheck = admissionsCrmService.getGradeCapacities("tenant_apex_mumbai_01", "2026-2027");
+        var checkSci = capCheck.stream().filter(c -> "Grade 11-Science".equals(c.getGradeName())).findFirst().orElseThrow();
+        assertEquals(1, checkSci.getWaitlistCount());
+
+        // 4. One-Click Counselor Promotes Waitlisted Candidate
+        var promotedOffer = admissionsCrmService.promoteWaitlistApplicant("tenant_apex_mumbai_01", inq3.getId());
+        assertNotNull(promotedOffer);
+        assertEquals("ISSUED", promotedOffer.getOfferStatus());
+
+        var updatedInq3 = admissionsCrmService.getInquiryById("tenant_apex_mumbai_01", inq3.getId());
+        assertEquals("OFFER_ISSUED", updatedInq3.getPipelineStage());
+        assertTrue(updatedInq3.getCounselorNotes().contains("Promoted from Waitlist"));
+    }
+
+    @Test
+    void testCounselorTaskSchedulingAndFollowUpCompletion() {
+        TenantContext.setTenantId("tenant_apex_mumbai_01");
+
+        // 1. Create Inquiry
+        var inq = admissionsCrmService.createInquiry("tenant_apex_mumbai_01",
+                com.schoolerp.modules.admissions.dto.CreateInquiryRequest.builder()
+                        .parentName("Meera Sengupta")
+                        .parentPhone("+91-9844055555")
+                        .studentName("Arjun Sengupta")
+                        .gradeApplyingFor("Grade 4")
+                        .academicYear("2026-2027")
+                        .build());
+
+        // 2. Schedule Follow-Up Task
+        var taskReq = com.schoolerp.modules.admissions.dto.CreateCounselorTaskRequest.builder()
+                .inquiryId(inq.getId())
+                .counselorName("Sunita Verma")
+                .taskType("TOUR_REMINDER")
+                .title("Call parent to confirm tomorrow's campus tour")
+                .description("Inquired about STEM laboratory infrastructure and swimming coaching")
+                .dueDate(java.time.LocalDateTime.now().plusDays(1))
+                .priority("HIGH")
+                .build();
+
+        var task = admissionsCrmService.createCounselorTask("tenant_apex_mumbai_01", taskReq);
+        assertNotNull(task);
+        assertNotNull(task.getId());
+        assertEquals("PENDING", task.getStatus());
+        assertEquals("Sunita Verma", task.getCounselorName());
+
+        // 3. Query Tasks by Counselor
+        var counselorTasks = admissionsCrmService.getCounselorTasks("tenant_apex_mumbai_01", "Sunita Verma", "PENDING");
+        assertFalse(counselorTasks.isEmpty());
+        assertTrue(counselorTasks.stream().anyMatch(t -> t.getId().equals(task.getId())));
+
+        // 4. Complete Task with Outcome Notes
+        var completeReq = com.schoolerp.modules.admissions.dto.CompleteCounselorTaskRequest.builder()
+                .outcomeNotes("Spoke with Mrs. Sengupta. Family arriving at 10:30 AM tomorrow for tour.")
+                .build();
+
+        var completedTask = admissionsCrmService.completeCounselorTask("tenant_apex_mumbai_01", task.getId(), completeReq);
+        assertEquals("COMPLETED", completedTask.getStatus());
+        assertNotNull(completedTask.getCompletedAt());
+        assertEquals("Spoke with Mrs. Sengupta. Family arriving at 10:30 AM tomorrow for tour.", completedTask.getOutcomeNotes());
+
+        // 5. Verify Inquiry Counselor Notes Updated
+        var inqWithNotes = admissionsCrmService.getInquiryById("tenant_apex_mumbai_01", inq.getId());
+        assertTrue(inqWithNotes.getCounselorNotes().contains("Spoke with Mrs. Sengupta"));
+    }
+
+    @Test
+    void testIndian100PointCriteriaAndStatutoryCertificateVerification() {
+        // 1. Create Inquiry for Indian School Admission
+        var inqReq = com.schoolerp.modules.admissions.dto.CreateInquiryRequest.builder()
+                .studentName("Ananya Deshmukh")
+                .parentName("Dr. Nilesh Deshmukh")
+                .parentPhone("+919820011223")
+                .parentEmail("nilesh.deshmukh@gmail.com")
+                .gradeApplyingFor("Grade 1")
+                .academicYear("2026-2027")
+                .sourceChannel("WEBSITE_FORM")
+                .build();
+
+        var inq = admissionsCrmService.createInquiry("tenant_apex_mumbai_01", inqReq);
+        assertNotNull(inq);
+
+        // 2. Evaluate 100-Point DoE Criteria
+        // Distance: 2.2 km (<=3km -> 40 pts) + Sibling (30 pts) + Alumni (10 pts) + Single Girl Child (5 pts) = 85 pts
+        var criteriaReq = com.schoolerp.modules.admissions.dto.EvaluatePointsRequest.builder()
+                .inquiryId(inq.getId())
+                .distanceKm(new java.math.BigDecimal("2.20"))
+                .hasSibling(true)
+                .hasAlumniParent(true)
+                .alumniPassingYear(2010)
+                .isSingleGirlChild(true)
+                .isFirstBorn(true)
+                .build();
+
+        var criteria = admissionsCrmService.evaluate100PointCriteria("tenant_apex_mumbai_01", criteriaReq);
+        assertNotNull(criteria);
+        assertEquals(40, criteria.getDistancePoints());
+        assertEquals(30, criteria.getSiblingPoints());
+        assertEquals(10, criteria.getAlumniPoints());
+        assertEquals(5, criteria.getGirlChildPoints());
+        assertEquals(5, criteria.getFirstBornPoints());
+        assertEquals(90, criteria.getTotalCalculatedPoints());
+        assertEquals("TIER_1_DIRECT_CALL", criteria.getCriteriaVerdict());
+
+        // 3. Record Government Caste Certificate (OBC-NCL issued by Tehsildar)
+        var certReq = com.schoolerp.modules.admissions.dto.StatutoryCertificateRequest.builder()
+                .inquiryId(inq.getId())
+                .certificateType("CASTE_OBC_NCL")
+                .certificateNumber("OBC-MH-2026-98124")
+                .issuingAuthority("Tehsildar & Executive Magistrate, Haveli Pune")
+                .issueDate(java.time.LocalDate.now().minusMonths(2))
+                .validFinancialYear("2026-2027")
+                .verificationRemarks("Original Tehsildar Non-Creamy Layer verified for FY 2026-2027")
+                .markVerifiedImmediately(true)
+                .build();
+
+        var cert = admissionsCrmService.recordStatutoryCertificate("tenant_apex_mumbai_01", certReq);
+        assertNotNull(cert);
+        assertEquals("VERIFIED", cert.getVerifiedStatus());
+        assertEquals("CASTE_OBC_NCL", cert.getCertificateType());
+
+        // 4. Verify inquiry updated with social category
+        var updatedInq = admissionsCrmService.getInquiryById("tenant_apex_mumbai_01", inq.getId());
+        assertEquals("OBC_NCL", updatedInq.getSocialCategory());
+        assertEquals(90, updatedInq.getLeadScore());
+
+        // 5. Query Category Merit List
+        var meritList = admissionsCrmService.getCategoryMeritList("tenant_apex_mumbai_01", "Grade 1");
+        assertNotNull(meritList);
+        assertEquals("Grade 1", meritList.getGradeName());
+        assertTrue(meritList.getTotalApplicants() > 0);
+        assertTrue(meritList.getRankedCandidates().stream().anyMatch(c -> c.getInquiryId().equals(inq.getId())));
+    }
+
+    @Test
+    void testCategoryWiseSeatMatrixAndSegregatedWaitlistPromotion() {
+        // 1. Configure Indian Statutory Quota Matrix for Grade 6
+        var matrixReq = com.schoolerp.modules.admissions.dto.ConfigureCategoryMatrixRequest.builder()
+                .gradeName("Grade 6")
+                .academicYear("2026-2027")
+                .totalSanctionedSeats(120)
+                .generalQuotaSeats(50)
+                .rteQuotaSeats(30)
+                .obcQuotaSeats(15)
+                .scQuotaSeats(8)
+                .stQuotaSeats(4)
+                .cwsnQuotaSeats(3)
+                .siblingQuotaSeats(5)
+                .staffWardQuotaSeats(3)
+                .singleGirlChildQuotaSeats(2)
+                .managementQuotaSeats(10)
+                .build();
+
+        var overview = admissionsCrmService.configureCategoryMatrix("tenant_apex_mumbai_01", matrixReq);
+        assertNotNull(overview);
+        assertEquals(120, overview.getTotalSanctionedSeats());
+        assertEquals(15, overview.getObcQuotaSeats());
+        assertEquals(8, overview.getScQuotaSeats());
+        assertEquals(3, overview.getCwsnQuotaSeats());
+
+        // 2. Create Candidate on Waitlist under OBC_NCL quota
+        var inqReq = com.schoolerp.modules.admissions.dto.CreateInquiryRequest.builder()
+                .studentName("Kavya Patil")
+                .parentName("Sachin Patil")
+                .parentPhone("+919765432100")
+                .gradeApplyingFor("Grade 6")
+                .academicYear("2026-2027")
+                .sourceChannel("WALK_IN")
+                .build();
+
+        var inq = admissionsCrmService.createInquiry("tenant_apex_mumbai_01", inqReq);
+        admissionsCrmService.updatePipelineStage("tenant_apex_mumbai_01", inq.getId(), "WAITLISTED", "Waitlisted in OBC-NCL category", null);
+
+        // 3. Promote Candidate from OBC_NCL Category Waitlist
+        var promoted = admissionsCrmService.promoteCategoryWaitlist("tenant_apex_mumbai_01", "OBC_NCL", inq.getId());
+        assertEquals("OFFER_ISSUED", promoted.getPipelineStage());
+        assertEquals("OBC_NCL", promoted.getAdmissionQuota());
+    }
+
+    @Test
+    void testEntranceAssessmentAdmitCardAndParentDigitalOfferAcceptance() {
+        // 1. Create Inquiry for Grade 9 Entrance Screening
+        var inqReq = com.schoolerp.modules.admissions.dto.CreateInquiryRequest.builder()
+                .studentName("Rohit Raghavan")
+                .parentName("Suresh Raghavan")
+                .parentPhone("+919840012345")
+                .gradeApplyingFor("Grade 9")
+                .academicYear("2026-2027")
+                .sourceChannel("WEBSITE_FORM")
+                .build();
+
+        var inq = admissionsCrmService.createInquiry("tenant_apex_mumbai_01", inqReq);
+
+        // 2. Schedule Entrance Assessment
+        var schedReq = com.schoolerp.modules.admissions.dto.ScheduleEntranceTestRequest.builder()
+                .inquiryId(inq.getId())
+                .testDate(java.time.LocalDateTime.now().plusDays(5))
+                .examHall("Aryabhata Block - Exam Hall B")
+                .reportingTime("08:30 AM")
+                .qualifyingCutoffPercentage(java.math.BigDecimal.valueOf(60.0))
+                .build();
+
+        var testDto = admissionsCrmService.scheduleEntranceTest("tenant_apex_mumbai_01", schedReq);
+        assertNotNull(testDto);
+        assertNotNull(testDto.getAdmitCardToken());
+        assertTrue(testDto.getTestCode().startsWith("TEST-2026-G"));
+        assertEquals("PENDING", testDto.getResultStatus());
+
+        // 3. Public Parent Admit Card Retrieval
+        var admitCard = admissionsCrmService.getPublicAdmitCard("tenant_apex_mumbai_01", inq.getInquiryNumber());
+        assertNotNull(admitCard);
+        assertEquals(testDto.getAdmitCardToken(), admitCard.getAdmitCardToken());
+        assertEquals("Aryabhata Block - Exam Hall B", admitCard.getExamHall());
+
+        // 4. Evaluate Entrance Test: Math 22, English 23, Science 20, Aptitude 20 = 85/100 (85.0% >= 60% cutoff)
+        var evalReq = com.schoolerp.modules.admissions.dto.EvaluateEntranceTestRequest.builder()
+                .mathScore(java.math.BigDecimal.valueOf(22.0))
+                .englishScore(java.math.BigDecimal.valueOf(23.0))
+                .scienceScore(java.math.BigDecimal.valueOf(20.0))
+                .aptitudeScore(java.math.BigDecimal.valueOf(20.0))
+                .maximumScore(java.math.BigDecimal.valueOf(100.0))
+                .evaluatorRemarks("Excellent analytical and scientific problem-solving aptitude.")
+                .build();
+
+        var evaluated = admissionsCrmService.evaluateEntranceTest("tenant_apex_mumbai_01", testDto.getId(), evalReq);
+        assertEquals("QUALIFIED", evaluated.getResultStatus());
+        assertEquals(java.math.BigDecimal.valueOf(85.0).setScale(2), evaluated.getPercentage().setScale(2, java.math.RoundingMode.HALF_UP));
+
+        // 5. Verify Inquiry Advanced to PRINCIPAL_INTERVIEW
+        var inqInterview = admissionsCrmService.getInquiryById("tenant_apex_mumbai_01", inq.getId());
+        assertEquals("PRINCIPAL_INTERVIEW", inqInterview.getPipelineStage());
+
+        // 6. Link Verified Sibling for Concession Forecast
+        var existingStudent = studentRepository.findAll().get(0);
+        var linkSiblingReq = com.schoolerp.modules.admissions.dto.LinkSiblingRequest.builder()
+                .siblingStudentId(existingStudent.getId())
+                .build();
+
+        var concessionPreview = admissionsCrmService.linkVerifiedSibling("tenant_apex_mumbai_01", inq.getId(), linkSiblingReq);
+        assertNotNull(concessionPreview);
+        assertEquals(java.math.BigDecimal.valueOf(15.0).setScale(2), concessionPreview.getConcessionPercentage().setScale(2, java.math.RoundingMode.HALF_UP));
+        assertEquals(java.math.BigDecimal.valueOf(18000.0).setScale(2), concessionPreview.getEstimatedConcessionSavings().setScale(2, java.math.RoundingMode.HALF_UP));
+
+        // 7. Apply for Sports Scholarship
+        var scholarshipReq = com.schoolerp.modules.admissions.dto.ApplyScholarshipRequest.builder()
+                .inquiryId(inq.getId())
+                .scholarshipType("SPORTS_NATIONAL")
+                .claimedAchievementOrIncome("Gold Medalist - CBSE National Swimming Championship 2025")
+                .requestedConcessionPercentage(java.math.BigDecimal.valueOf(30.0))
+                .build();
+
+        var scholarship = admissionsCrmService.applyForScholarship("tenant_apex_mumbai_01", scholarshipReq);
+        assertEquals("SUBMITTED", scholarship.getCommitteeStatus());
+
+        var decideReq = com.schoolerp.modules.admissions.dto.DecideScholarshipRequest.builder()
+                .decision("APPROVED")
+                .approvedConcessionPercentage(java.math.BigDecimal.valueOf(30.0))
+                .approvedAmount(java.math.BigDecimal.valueOf(36000.0))
+                .committeeReviewerNotes("Approved under CBSE National Sports Excellence Policy")
+                .reviewedBy("Director of Physical Education & Admissions Board")
+                .build();
+
+        var decided = admissionsCrmService.decideScholarship("tenant_apex_mumbai_01", scholarship.getId(), decideReq);
+        assertEquals("APPROVED", decided.getCommitteeStatus());
+
+        // 8. Issue Formal Merit Offer Letter
+        var offerReq = com.schoolerp.modules.admissions.dto.IssueOfferRequest.builder()
+                .inquiryId(inq.getId())
+                .tuitionFeeTotal(java.math.BigDecimal.valueOf(120000.0))
+                .scholarshipOrConcessionAmount(java.math.BigDecimal.valueOf(36000.0))
+                .validUntilDate(java.time.LocalDate.now().plusDays(14))
+                .build();
+
+        var offer = admissionsCrmService.issueMeritOffer("tenant_apex_mumbai_01", offerReq);
+        assertNotNull(offer);
+        assertEquals(java.math.BigDecimal.valueOf(84000.0).setScale(2), offer.getNetAdmissionPayable().setScale(2, java.math.RoundingMode.HALF_UP));
+
+        // 9. Parent Digital Offer Acceptance & Online Seat Lock Deposit (₹25,000)
+        var acceptReq = com.schoolerp.modules.admissions.dto.AcceptOfferAndLockRequest.builder()
+                .parentSignatureName("Suresh Raghavan")
+                .parentIpAddress("49.207.180.25")
+                .seatLockDepositAmount(java.math.BigDecimal.valueOf(25000.0))
+                .depositPaymentMethod("UPI")
+                .build();
+
+        var acceptResult = admissionsCrmService.acceptOfferAndLockSeat("tenant_apex_mumbai_01", offer.getId(), acceptReq);
+        assertNotNull(acceptResult);
+        assertEquals("ACCEPTED", acceptResult.getOfferStatus());
+        assertEquals("PAID", acceptResult.getDepositStatus());
+        assertEquals("Suresh Raghavan", acceptResult.getParentSignatureName());
+        assertTrue(acceptResult.getDepositTransactionId().startsWith("TXN-UPI-"));
+    }
+
+    @Test
+    void testHostelRoomAllocationAndWardenDormRollCall() {
+        TenantContext.setTenantId("tenant_apex_mumbai_01");
+
+        // 1. Register Hostel Room
+        var roomReq = com.schoolerp.modules.operations.dto.RegisterHostelRoomRequest.builder()
+                .blockName("Aryabhata Senior Boys Hostel")
+                .floorNumber(2)
+                .roomNumber("B-204")
+                .roomType("AC")
+                .totalBeds(4)
+                .annualFee(BigDecimal.valueOf(85000.00))
+                .build();
+
+        var room = operationsService.registerHostelRoom(roomReq);
+        assertNotNull(room);
+        assertEquals("Aryabhata Senior Boys Hostel", room.getBlockName());
+        assertEquals("B-204", room.getRoomNumber());
+        assertEquals(4, room.getTotalBeds());
+        assertEquals(0, room.getOccupiedBeds());
+        assertEquals(4, room.getAvailableBeds());
+
+        // 2. Allocate Bed to Student
+        var student = studentRepository.findAll().get(0);
+        var allocReq = com.schoolerp.modules.operations.dto.AllocateHostelBedRequest.builder()
+                .roomId(room.getId())
+                .studentId(student.getId())
+                .bedNumber(1)
+                .academicYear("2026-2027")
+                .build();
+
+        var allocation = operationsService.allocateHostelBed(allocReq);
+        assertNotNull(allocation);
+        assertEquals(1, allocation.getBedNumber());
+        assertEquals(student.getId(), allocation.getStudentId());
+        assertEquals("ACTIVE", allocation.getStatus());
+
+        // 3. Record Warden Night Roll-Call
+        var rollCallReq = com.schoolerp.modules.operations.dto.HostelRollCallRequest.builder()
+                .allocationId(allocation.getId())
+                .rollCallDate(java.time.LocalDate.now())
+                .sessionType("NIGHT_LIGHTS_OUT")
+                .status("PRESENT")
+                .remarks("Student present in dorm bunk at 22:00 lights out")
+                .wardenName("Col. S. Sharma (Retd.)")
+                .build();
+
+        var rollCall = operationsService.recordHostelRollCall(rollCallReq);
+        assertNotNull(rollCall);
+        assertEquals("NIGHT_LIGHTS_OUT", rollCall.getSessionType());
+        assertEquals("PRESENT", rollCall.getStatus());
+        assertEquals("Col. S. Sharma (Retd.)", rollCall.getWardenName());
+
+        // 4. Issue Weekend Exeat Pass
+        var exeatReq = com.schoolerp.modules.operations.dto.HostelExeatPassRequest.builder()
+                .studentId(student.getId())
+                .exeatType("WEEKEND_HOME")
+                .departureTime(java.time.LocalDateTime.now().plusHours(4))
+                .expectedReturnTime(java.time.LocalDateTime.now().plusDays(2))
+                .parentAuthorized(true)
+                .parentContactPhone("+91-98200-11223")
+                .build();
+
+        var exeat = operationsService.issueHostelExeatPass(exeatReq);
+        assertNotNull(exeat);
+        assertTrue(exeat.getPassNumber().startsWith("EXEAT-"));
+        assertEquals("WEEKEND_HOME", exeat.getExeatType());
+        assertEquals("APPROVED", exeat.getStatus());
+
+        // 5. Query Hostel Roster
+        var roster = operationsService.getHostelRoster("Aryabhata Senior Boys Hostel");
+        assertNotNull(roster);
+        assertTrue(roster.getTotalRooms() >= 1);
+        assertTrue(roster.getTotalOccupied() >= 1);
+        assertFalse(roster.getResidents().isEmpty());
+    }
+
+    @Test
+    void testCampusVisitorCheckInHostApprovalAndCheckout() {
+        TenantContext.setTenantId("tenant_apex_mumbai_01");
+
+        // 1. Visitor Check-In
+        var checkInReq = com.schoolerp.modules.operations.dto.VisitorCheckInRequest.builder()
+                .visitorName("Rajesh Sharma")
+                .visitorPhone("+91-98765-43210")
+                .idProofType("AADHAAR")
+                .idProofNumber("XXXX-XXXX-9182")
+                .purposeOfVisit("PARENT_MEETING")
+                .hostStaffName("Dr. Anita Roy")
+                .entryGate("Gate 1 - Main Arch")
+                .build();
+
+        var visitor = operationsService.checkInVisitor(checkInReq);
+        assertNotNull(visitor);
+        assertTrue(visitor.getVisitorPassNumber().startsWith("VIS-"));
+        assertTrue(visitor.getBadgeQrToken().startsWith("VQR-"));
+        assertEquals("ACTIVE_ON_CAMPUS", visitor.getStatus());
+        assertEquals("PENDING", visitor.getHostApprovalStatus());
+
+        // 2. Host Approval Workflow
+        var approvalReq = com.schoolerp.modules.operations.dto.VisitorApprovalRequest.builder()
+                .approvalDecision("APPROVED")
+                .build();
+
+        var approved = operationsService.updateVisitorHostApproval(visitor.getId(), approvalReq);
+        assertEquals("APPROVED", approved.getHostApprovalStatus());
+
+        // 3. Query Active Visitors
+        var activeVisitors = operationsService.getActiveVisitors();
+        assertNotNull(activeVisitors);
+        assertTrue(activeVisitors.stream().anyMatch(v -> v.getId().equals(visitor.getId())));
+
+        // 4. Visitor Check-Out
+        var checkedOut = operationsService.checkOutVisitor(visitor.getId());
+        assertEquals("CHECKED_OUT", checkedOut.getStatus());
+        assertNotNull(checkedOut.getCheckedOutAt());
+    }
+
+    @Test
+    void testFleetFuelEfficiencyAndRtoComplianceSentinel() {
+        TenantContext.setTenantId("tenant_apex_mumbai_01");
+
+        // 1. Seed or retrieve Vehicle
+        var vehicles = operationsService.getVehicles();
+        assertFalse(vehicles.isEmpty(), "Vehicle fleet must be initialized in test seed");
+        var vehicle = vehicles.get(0);
+
+        // 2. Record First Fuel Log (Baseline Odometer 42,000)
+        var fuelReq1 = com.schoolerp.modules.operations.dto.RecordFuelLogRequest.builder()
+                .vehicleId(vehicle.getId())
+                .vehicleRegistration(vehicle.getRegistrationNumber())
+                .fillDate(java.time.LocalDate.now().minusDays(5))
+                .fuelLitres(BigDecimal.valueOf(50.00))
+                .fuelRatePerLitre(BigDecimal.valueOf(94.50))
+                .odometerReading(42000)
+                .fuelStationName("Indian Oil - Viman Nagar")
+                .driverName("Ramesh Pawar")
+                .build();
+
+        var log1 = operationsService.recordFuelLog(fuelReq1);
+        assertNotNull(log1);
+        assertEquals(42000, log1.getOdometerReading());
+
+        // 3. Record Second Fuel Log (Odometer 42,225 km -> 225 km run / 45.0 L = 5.00 km/L)
+        var fuelReq2 = com.schoolerp.modules.operations.dto.RecordFuelLogRequest.builder()
+                .vehicleId(vehicle.getId())
+                .vehicleRegistration(vehicle.getRegistrationNumber())
+                .fillDate(java.time.LocalDate.now())
+                .fuelLitres(BigDecimal.valueOf(45.00))
+                .fuelRatePerLitre(BigDecimal.valueOf(94.50))
+                .odometerReading(42225)
+                .fuelStationName("Indian Oil - Viman Nagar")
+                .driverName("Ramesh Pawar")
+                .build();
+
+        var log2 = operationsService.recordFuelLog(fuelReq2);
+        assertNotNull(log2);
+        assertEquals(225, log2.getKilometersRun());
+        assertEquals(BigDecimal.valueOf(5.00).setScale(2), log2.getMileageKmPerLitre().setScale(2, java.math.RoundingMode.HALF_UP));
+        assertFalse(log2.isPilferageAlert(), "Mileage 5.0 km/L should not trigger pilferage alert");
+
+        // 4. Test RTO Compliance Sentinel
+        var complianceList = operationsService.getVehicleFitnessCompliance();
+        assertNotNull(complianceList);
+        assertFalse(complianceList.isEmpty());
+        var sentinel = complianceList.get(0);
+        assertNotNull(sentinel.getRtoFitnessExpiry());
+        assertNotNull(sentinel.getInsurancePolicyExpiry());
+        assertNotNull(sentinel.getPucCertificateExpiry());
+        assertTrue(sentinel.getDaysUntilFitnessExpiry() > 0);
+        assertEquals("COMPLIANT", sentinel.getComplianceStatus());
+
+        // 5. Test Multi-Year Cumulative Official Transcript Generation
+        var student = studentRepository.findAll().get(0);
+        var transcriptReq = com.schoolerp.modules.students.dto.GenerateTranscriptRequest.builder()
+                .academicStream("Senior Secondary Science")
+                .cumulativeGpa(BigDecimal.valueOf(9.60))
+                .cumulativePercentage(BigDecimal.valueOf(96.00))
+                .totalCredits(42)
+                .mediumOfInstruction("English")
+                .issuedByPrincipal("Principal Dr. Anita Roy")
+                .build();
+
+        var transcript = studentService.generateOfficialTranscript(student.getId(), transcriptReq);
+        assertNotNull(transcript);
+        assertTrue(transcript.getTranscriptNumber().startsWith("TRANS-2026-"));
+        assertEquals(student.getFullName(), transcript.getStudentName());
+        assertNotNull(transcript.getVerificationHash());
+        assertTrue(transcript.getVerificationHash().startsWith("SHA256:"));
+        assertEquals(BigDecimal.valueOf(9.60), transcript.getCumulativeGpa());
+        assertEquals("English", transcript.getMediumOfInstruction());
     }
 }
 

@@ -11,7 +11,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -32,7 +32,7 @@ public class SecurityConfig {
 
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+        return Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8();
     }
 
     @Bean
@@ -53,13 +53,16 @@ public class SecurityConfig {
                                 "/api/v1/operations/telemetry/**",
                                 "/api/v1/operations/gate-passes/verify-scan",
                                 "/api/v1/mobile/**",
+                                "/api/v1/admissions/crm/portal/**",
+                                "/api/v1/admissions/crm/entrance-tests/admit-card/**",
                                 "/h2-console/**",
                                 "/v3/api-docs/**",
-                                "/swagger-ui/**"
+                                "/swagger-ui/**",
+                                "/actuator/**"
                         ).permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         // Protected endpoints with role checking
-                        .requestMatchers("/api/v1/system/**").hasRole("SUPER_ADMIN")
+                        .requestMatchers("/api/v1/system/**").hasAnyRole("SUPER_ADMIN", "ADMIN", "PRINCIPAL", "TEACHER", "STAFF")
                         .requestMatchers("/api/v1/communication/**").hasAnyRole("SUPER_ADMIN", "TEACHER", "PRINCIPAL")
                         .requestMatchers("/api/v1/finance/**").hasAnyRole("SUPER_ADMIN", "ACCOUNTANT")
                         .requestMatchers("/api/v1/attendance/**").hasAnyRole("SUPER_ADMIN", "TEACHER", "PRINCIPAL")

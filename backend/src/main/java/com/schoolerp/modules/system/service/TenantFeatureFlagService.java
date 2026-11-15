@@ -5,6 +5,8 @@ import com.schoolerp.modules.system.entity.TenantFeatureFlag;
 import com.schoolerp.modules.system.repository.TenantFeatureFlagRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +21,7 @@ public class TenantFeatureFlagService {
     private final TenantFeatureFlagRepository featureFlagRepository;
     private final AuditLogService auditLogService;
 
+    @Cacheable(value = "tenantFeatures", key = "#featureKey")
     public boolean isFeatureEnabled(String featureKey) {
         String tenantId = TenantContext.getTenantId() != null ? TenantContext.getTenantId() : "tenant_apex_mumbai_01";
         return featureFlagRepository.findByTenantIdAndFeatureKey(tenantId, featureKey)
@@ -27,6 +30,7 @@ public class TenantFeatureFlagService {
     }
 
     @Transactional
+    @CacheEvict(value = "tenantFeatures", allEntries = true)
     public TenantFeatureFlag toggleFeature(String featureKey, boolean enabled, String tier) {
         String tenantId = TenantContext.getTenantId() != null ? TenantContext.getTenantId() : "tenant_apex_mumbai_01";
 

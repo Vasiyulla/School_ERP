@@ -4,6 +4,8 @@ import com.schoolerp.common.context.TenantContext;
 import com.schoolerp.modules.system.entity.AuditLog;
 import com.schoolerp.modules.system.repository.AuditLogRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -21,6 +23,12 @@ public class AuditLogService {
     @Transactional(readOnly = true)
     public List<AuditLog> getLogs() {
         return auditLogRepository.findAllByTenantIdOrderByTimestampDesc(TenantContext.getTenantId());
+    }
+
+    @Transactional(readOnly = true)
+    public Page<AuditLog> getPagedLogs(int page, int size) {
+        String tenantId = TenantContext.getTenantId() != null ? TenantContext.getTenantId() : "tenant_apex_mumbai_01";
+        return auditLogRepository.findAllByTenantIdOrderByTimestampDesc(tenantId, PageRequest.of(page, size));
     }
 
     public void recordEvent(String action, String resourceType, String resourceId, String details) {

@@ -5,6 +5,8 @@ import com.schoolerp.modules.system.entity.TenantModuleLicense;
 import com.schoolerp.modules.system.repository.TenantModuleLicenseRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +26,7 @@ public class TenantModuleLicenseService {
         return licenseRepository.findByTenantId(TenantContext.getTenantId());
     }
 
+    @Cacheable(value = "tenantLicenses", key = "#tenantId + '_' + #moduleKey")
     public boolean isModuleEnabled(String tenantId, String moduleKey) {
         return licenseRepository.findByTenantIdAndModuleKey(tenantId, moduleKey)
                 .map(TenantModuleLicense::isEnabled)
@@ -31,6 +34,7 @@ public class TenantModuleLicenseService {
     }
 
     @Transactional
+    @CacheEvict(value = "tenantLicenses", allEntries = true)
     public TenantModuleLicense toggleModule(String moduleKey, boolean enabled, String actor) {
         String tenantId = TenantContext.getTenantId();
         TenantModuleLicense license = licenseRepository
@@ -54,6 +58,7 @@ public class TenantModuleLicenseService {
     }
 
     @Transactional
+    @CacheEvict(value = "tenantLicenses", allEntries = true)
     public void seedDefaultModulesForTenant(String tenantId) {
         if (!licenseRepository.findByTenantId(tenantId).isEmpty()) {
             return;

@@ -1,9 +1,11 @@
 package com.schoolerp.modules.operations.controller;
 
 import com.schoolerp.common.response.ApiResponse;
+import com.schoolerp.modules.operations.dto.*;
 import com.schoolerp.modules.operations.entity.*;
 import com.schoolerp.modules.operations.service.LibraryService;
 import com.schoolerp.modules.operations.service.OperationsService;
+import jakarta.validation.Valid;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -127,6 +129,80 @@ public class OperationsController {
     public ResponseEntity<ApiResponse<BookIssueRecord>> returnBook(@PathVariable UUID id) {
         BookIssueRecord record = operationsService.returnBook(id);
         return ResponseEntity.ok(ApiResponse.ok("Book returned successfully", record));
+    }
+
+    // --- Hostel & Residential Operations ---
+
+    @PostMapping("/hostel/rooms")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('PRINCIPAL') or hasRole('HOSTEL_WARDEN')")
+    public ResponseEntity<ApiResponse<HostelRoomDTO>> registerHostelRoom(@Valid @RequestBody RegisterHostelRoomRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok("Hostel room registered successfully", operationsService.registerHostelRoom(request)));
+    }
+
+    @PostMapping("/hostel/allocations")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('PRINCIPAL') or hasRole('HOSTEL_WARDEN')")
+    public ResponseEntity<ApiResponse<HostelAllocationDTO>> allocateHostelBed(@Valid @RequestBody AllocateHostelBedRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok("Hostel bed allocated successfully", operationsService.allocateHostelBed(request)));
+    }
+
+    @PostMapping("/hostel/roll-call")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('HOSTEL_WARDEN') or hasRole('TEACHER')")
+    public ResponseEntity<ApiResponse<HostelRollCallDTO>> recordHostelRollCall(@Valid @RequestBody HostelRollCallRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok("Hostel roll call recorded successfully", operationsService.recordHostelRollCall(request)));
+    }
+
+    @PostMapping("/hostel/exeat-passes")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('HOSTEL_WARDEN') or hasRole('PRINCIPAL')")
+    public ResponseEntity<ApiResponse<HostelExeatPassDTO>> issueHostelExeatPass(@Valid @RequestBody HostelExeatPassRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok("Hostel exeat pass issued successfully", operationsService.issueHostelExeatPass(request)));
+    }
+
+    @GetMapping("/hostel/roster/{block}")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('PRINCIPAL') or hasRole('HOSTEL_WARDEN') or hasRole('TEACHER')")
+    public ResponseEntity<ApiResponse<HostelRosterDTO>> getHostelRoster(@PathVariable String block) {
+        return ResponseEntity.ok(ApiResponse.ok("Hostel occupancy roster retrieved", operationsService.getHostelRoster(block)));
+    }
+
+    // --- Campus Visitor Security Management (VMS) ---
+
+    @PostMapping("/visitors/check-in")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('SECURITY_GUARD') or hasRole('FRONT_DESK') or hasRole('PRINCIPAL')")
+    public ResponseEntity<ApiResponse<CampusVisitorDTO>> checkInVisitor(@Valid @RequestBody VisitorCheckInRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok("Visitor check-in logged and badge issued", operationsService.checkInVisitor(request)));
+    }
+
+    @PutMapping("/visitors/{id}/host-approval")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('TEACHER') or hasRole('PRINCIPAL') or hasRole('STAFF')")
+    public ResponseEntity<ApiResponse<CampusVisitorDTO>> updateVisitorHostApproval(
+            @PathVariable UUID id,
+            @Valid @RequestBody VisitorApprovalRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok("Visitor host approval status updated", operationsService.updateVisitorHostApproval(id, request)));
+    }
+
+    @PutMapping("/visitors/{id}/check-out")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('SECURITY_GUARD') or hasRole('FRONT_DESK') or hasRole('PRINCIPAL')")
+    public ResponseEntity<ApiResponse<CampusVisitorDTO>> checkOutVisitor(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.ok("Visitor check-out confirmed", operationsService.checkOutVisitor(id)));
+    }
+
+    @GetMapping("/visitors/active")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('SECURITY_GUARD') or hasRole('FRONT_DESK') or hasRole('PRINCIPAL')")
+    public ResponseEntity<ApiResponse<List<CampusVisitorDTO>>> getActiveVisitors() {
+        return ResponseEntity.ok(ApiResponse.ok("Active campus visitors retrieved", operationsService.getActiveVisitors()));
+    }
+
+    // --- Fleet Fuel & Compliance Logistics ---
+
+    @PostMapping("/fleet/fuel-logs")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('TRANSPORT_MANAGER')")
+    public ResponseEntity<ApiResponse<VehicleFuelLogDTO>> recordFuelLog(@Valid @RequestBody RecordFuelLogRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok("Fuel log recorded and mileage analyzed", operationsService.recordFuelLog(request)));
+    }
+
+    @GetMapping("/fleet/fitness-sentinel")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('TRANSPORT_MANAGER') or hasRole('PRINCIPAL')")
+    public ResponseEntity<ApiResponse<List<VehicleComplianceSentinelDTO>>> getVehicleFitnessCompliance() {
+        return ResponseEntity.ok(ApiResponse.ok("Fleet RTO compliance and fitness records retrieved", operationsService.getVehicleFitnessCompliance()));
     }
 
     @Data

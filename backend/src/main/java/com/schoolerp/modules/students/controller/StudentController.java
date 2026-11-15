@@ -64,5 +64,14 @@ public class StudentController {
         StudentDocument updated = studentService.updateCustody(documentId, request);
         return ResponseEntity.ok(ApiResponse.ok("Document custody updated", updated));
     }
+
+    @PostMapping("/{id}/transcripts/generate")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('PRINCIPAL')")
+    public ResponseEntity<ApiResponse<com.schoolerp.modules.students.dto.OfficialTranscriptDTO>> generateTranscript(
+            @PathVariable UUID id,
+            @RequestBody(required = false) com.schoolerp.modules.students.dto.GenerateTranscriptRequest request) {
+        var transcript = studentService.generateOfficialTranscript(id, request != null ? request : new com.schoolerp.modules.students.dto.GenerateTranscriptRequest());
+        return ResponseEntity.ok(ApiResponse.ok("Official cumulative multi-year transcript generated with tamper-proof cryptographic verification", transcript));
+    }
 }
 
