@@ -1,0 +1,58 @@
+# ==============================================================================
+# Spring Boot 3 - On-Premise & Private Cloud Enterprise Profile
+# ==============================================================================
+spring:
+  config:
+    activate:
+      on-profile: onprem
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://db-primary:5432,db-secondary:5432/${DB_NAME:school_erp_db}?targetServerType=primary&connectTimeout=5&socketTimeout=30}
+    username: ${SPRING_DATASOURCE_USERNAME:school_erp_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:secure_db_pass}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 40
+      minimum-idle: 10
+      idle-timeout: 300000
+      connection-timeout: 20000
+      max-lifetime: 1200000
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    schemas: identity,institution,admissions,students,academics,staff,attendance,examinations,finance,communication,operations,system
+
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: identity
+        jdbc:
+          batch_size: 50
+          order_inserts: true
+          order_updates: true
+
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:redis}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      password: ${SPRING_DATA_REDIS_PASSWORD:}
+      timeout: 2000ms
+
+# Local S3 Object Storage via MinIO (Zero Cloud Bill)
+app:
+  storage:
+    provider: minio
+    s3:
+      endpoint: ${AWS_S3_ENDPOINT:http://minio:9000}
+      region: ${AWS_S3_REGION:us-east-1}
+      bucket: ${AWS_S3_BUCKET:school-vault}
+      access-key: ${AWS_ACCESS_KEY_ID:minioadmin}
+      secret-key: ${AWS_SECRET_ACCESS_KEY:minioadmin}
+      path-style-access: true
+  onprem:
+    offline-mode-supported: true
+    local-lan-subnet: "192.168.0.0/16"

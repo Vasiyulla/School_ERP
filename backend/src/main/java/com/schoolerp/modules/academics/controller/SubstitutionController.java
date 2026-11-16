@@ -1,8 +1,11 @@
 package com.schoolerp.modules.academics.controller;
 
 import com.schoolerp.common.response.ApiResponse;
+import com.schoolerp.modules.academics.dto.DailySubstitutionDTO;
+import com.schoolerp.modules.academics.dto.MorningSubstitutionRequest;
 import com.schoolerp.modules.academics.dto.SubstitutionRecommendationDTO;
 import com.schoolerp.modules.academics.entity.TeacherSubstitution;
+import com.schoolerp.modules.academics.service.MorningSubstitutionService;
 import com.schoolerp.modules.academics.service.SubstitutionService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +25,7 @@ import java.util.UUID;
 public class SubstitutionController {
 
     private final SubstitutionService substitutionService;
+    private final MorningSubstitutionService morningSubstitutionService;
 
     @GetMapping("/recommend")
     @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('PRINCIPAL') or hasRole('TEACHER')")
@@ -59,6 +63,22 @@ public class SubstitutionController {
         LocalDate queryDate = date != null ? date : LocalDate.now();
         List<TeacherSubstitution> list = substitutionService.getSubstitutionsForDate(queryDate);
         return ResponseEntity.ok(ApiResponse.ok(list));
+    }
+
+    @PostMapping("/morning-auto-assign")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('PRINCIPAL') or hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<DailySubstitutionDTO>> autoAssignMorningSubstitution(
+            @RequestBody MorningSubstitutionRequest request) {
+        DailySubstitutionDTO assigned = morningSubstitutionService.autoAssignSubstitution(request);
+        return ResponseEntity.ok(ApiResponse.ok("Morning substitution auto-assigned with load balancing", assigned));
+    }
+
+    @GetMapping("/daily-roster")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('PRINCIPAL') or hasRole('TEACHER') or hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<List<DailySubstitutionDTO>>> getDailyRoster(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        List<DailySubstitutionDTO> roster = morningSubstitutionService.getDailyRoster(date);
+        return ResponseEntity.ok(ApiResponse.ok("Daily substitution roster retrieved", roster));
     }
 
     @Data

@@ -1,0 +1,45 @@
+{
+    # Global Caddy Configuration
+    admin off
+    auto_https off
+}
+
+:80 {
+    encode zstd gzip
+
+    # Security Headers
+    header {
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # Backend REST API Endpoints
+    handle /api/* {
+        reverse_proxy backend:8080 {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Actuator & Observability Probes
+    handle /actuator/* {
+        reverse_proxy backend:8080
+    }
+
+    # OpenAPI 3 Documentation
+    handle /v3/api-docs* {
+        reverse_proxy backend:8080
+    }
+
+    handle /swagger-ui* {
+        reverse_proxy backend:8080
+    }
+
+    # Frontend Portals (Next.js 15)
+    handle {
+        reverse_proxy frontend:3000
+    }
+}

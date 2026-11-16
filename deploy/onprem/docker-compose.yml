@@ -1,0 +1,198 @@
+version: '3.8'
+
+# ==============================================================================
+# School ERP System - Enterprise On-Premise & Private Cloud Deployment Stack
+# Benchmarked against GitLab Self-Managed, Odoo Enterprise Appliance & Verkada Hybrid
+# ==============================================================================
+
+services:
+  # 1. Reverse Proxy & Edge Router with Automatic Let's Encrypt TLS & Local LAN Routing
+  caddy:
+    image: caddy:2-alpine
+    container_name: school_caddy_edge
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - school_erp_net
+    depends_on:
+      - backend
+      - frontend
+
+  # 2. Cloudflare Zero Trust Tunnel (Solves No-Static-IP & CGNAT Router Firewalls)
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: school_cloudflared_tunnel
+    restart: unless-stopped
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:-}
+    command: tunnel --no-autoupdate run
+    networks:
+      - school_erp_net
+    depends_on:
+      - caddy
+
+  # 3. Next.js 15 Multi-Portal Web Frontend Hub
+  frontend:
+    image: school-erp-frontend:latest
+    container_name: school_portal_frontend
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://backend:8080/api/v1
+    networks:
+      - school_erp_net
+    depends_on:
+      - backend
+
+  # 4. Spring Boot 3 Modular Monolith Backend (Java 21 Project Loom)
+  backend:
+    image: school-erp-backend:latest
+    container_name: school_backend_engine
+    restart: unless-stopped
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod,onprem
+      # Multi-host failover: automatically connects to whichever database node is PRIMARY
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db-primary:5432,db-secondary:5432/${DB_NAME:-school_erp_db}?targetServerType=primary&connectTimeout=5&socketTimeout=30
+      - SPRING_DATASOURCE_USERNAME=${DB_USER:-school_erp_user}
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASS:-secure_db_pass}
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+      - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASS:-secure_redis_pass}
+      # MinIO Local S3 Integration (Zero Cloud Storage Bills)
+      - AWS_S3_ENDPOINT=http://minio:9000
+      - AWS_S3_REGION=us-east-1
+      - AWS_S3_BUCKET=${S3_BUCKET_NAME:-school-vault}
+      - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER:-minioadmin}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
+      - AWS_S3_PATH_STYLE_ACCESS=true
+      - JWT_SECRET=${JWT_SECRET:-secret_key_minimum_256_bits_for_hmac_sha512_security}
+      - SCHOOL_TENANT_ID=${TENANT_ID:-tenant_school_01}
+      - SCHOOL_NAME=${SCHOOL_NAME:-Apex Academy}
+      - SERVER_PORT=8080
+      - JAVA_TOOL_OPTIONS=-Xms4g -Xmx8g -XX:+UseZGC -XX:+ZGenerational
+    ports:
+      - "8080:8080"
+    networks:
+      - school_erp_net
+    depends_on:
+      db-primary:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  # 5. PostgreSQL 16 Primary Database (NVMe SSD Optimized)
+  db-primary:
+    image: postgres:16-alpine
+    container_name: school_db_primary
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${DB_NAME:-school_erp_db}
+      - POSTGRES_USER=${DB_USER:-school_erp_user}
+      - POSTGRES_PASSWORD=${DB_PASS:-secure_db_pass}
+    volumes:
+      - postgres_primary_data:/var/lib/postgresql/data
+      - ./postgres.conf:/etc/postgresql/postgresql.conf:ro
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-school_erp_user} -d ${DB_NAME:-school_erp_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5432:5432"
+    networks:
+      - school_erp_net
+
+  # 6. PostgreSQL 16 Hot Standby Database (Continuous Streaming Replication)
+  db-secondary:
+    image: postgres:16-alpine
+    container_name: school_db_secondary
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${DB_NAME:-school_erp_db}
+      - POSTGRES_USER=${DB_USER:-school_erp_user}
+      - POSTGRES_PASSWORD=${DB_PASS:-secure_db_pass}
+      - PGUSER=${DB_USER:-school_erp_user}
+      - PGPASSWORD=${DB_PASS:-secure_db_pass}
+    volumes:
+      - postgres_secondary_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    networks:
+      - school_erp_net
+    depends_on:
+      - db-primary
+
+  # 7. Redis 7 High-Speed Cache & Background Job Broker
+  redis:
+    image: redis:7-alpine
+    container_name: school_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASS:-secure_redis_pass}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASS:-secure_redis_pass}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - school_erp_net
+
+  # 8. MinIO High-Performance Local S3-Compatible Object Store
+  minio:
+    image: minio/minio:latest
+    container_name: school_minio_s3
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - school_erp_net
+
+  # 9. Automated Air-Gapped Backup Sentinel
+  backup-sentinel:
+    image: alpine:latest
+    container_name: school_backup_sentinel
+    restart: unless-stopped
+    volumes:
+      - postgres_primary_data:/var/lib/postgresql/data:ro
+      - minio_data:/minio_data:ro
+      - ./backups:/backups
+      - ./backup-daemon.sh:/scripts/backup-daemon.sh:ro
+    command: /bin/sh -c "while true; do /bin/sh /scripts/backup-daemon.sh; sleep 86400; done"
+    networks:
+      - school_erp_net
+    depends_on:
+      - db-primary
+
+networks:
+  school_erp_net:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:
+  postgres_primary_data:
+  postgres_secondary_data:
+  redis_data:
+  minio_data:

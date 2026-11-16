@@ -276,6 +276,24 @@ class SchoolErpApplicationTests {
     @Autowired
     private com.schoolerp.modules.operations.repository.VehicleRepository vehicleRepository;
 
+    @Autowired
+    private com.schoolerp.modules.academics.service.MorningSubstitutionService morningSubstitutionService;
+
+    @Autowired
+    private com.schoolerp.modules.examinations.service.ExamInvigilationService examInvigilationService;
+
+    @Autowired
+    private com.schoolerp.modules.operations.service.BookstoreService bookstoreService;
+
+    @Autowired
+    private com.schoolerp.modules.students.service.HealthPassportService healthPassportService;
+
+    @Autowired
+    private com.schoolerp.modules.operations.service.CafeteriaAllergenService cafeteriaAllergenService;
+
+    @Autowired
+    private com.schoolerp.modules.operations.service.CostumeRentalService costumeRentalService;
+
     @BeforeEach
     void setUp() {
         TenantContext.setTenantId("tenant_apex_mumbai_01");
@@ -3574,6 +3592,210 @@ class SchoolErpApplicationTests {
         assertTrue(transcript.getVerificationHash().startsWith("SHA256:"));
         assertEquals(BigDecimal.valueOf(9.60), transcript.getCumulativeGpa());
         assertEquals("English", transcript.getMediumOfInstruction());
+    }
+
+    @Test
+    void testMorningTeacherSubstitutionSolverAndEquityLimits() {
+        var employees = employeeRepository.findAll();
+        assertFalse(employees.isEmpty(), "Staff must be present");
+        var absentTeacher = employees.get(0);
+
+        var subReq = new com.schoolerp.modules.academics.dto.MorningSubstitutionRequest();
+        subReq.setSubstitutionDate(java.time.LocalDate.now());
+        subReq.setAbsentTeacherId(absentTeacher.getId());
+        subReq.setPeriodNumber(2);
+        subReq.setSubjectName("Advanced Physics");
+        subReq.setMaxDailySubstitutionsPerTeacher(2);
+
+        var assigned = morningSubstitutionService.autoAssignSubstitution(subReq);
+        assertNotNull(assigned);
+        assertEquals("ASSIGNED", assigned.getStatus());
+        assertNotEquals(absentTeacher.getId(), assigned.getSubstituteTeacherId(), "Absent teacher cannot substitute for self");
+        assertNotNull(assigned.getSubstituteTeacherName());
+
+        var roster = morningSubstitutionService.getDailyRoster(java.time.LocalDate.now());
+        assertNotNull(roster);
+        assertFalse(roster.isEmpty());
+        assertTrue(roster.stream().anyMatch(r -> r.getId().equals(assigned.getId())));
+    }
+
+    @Test
+    void testExamInvigilationAntiCheatingAndUfmDocket() {
+        var employees = employeeRepository.findAll();
+        assertFalse(employees.isEmpty());
+        var teacher = employees.get(0);
+
+        // 1. Anti-cheating conflict test: if teacher department matches exam subject, scheduling should throw
+        var conflictReq = new com.schoolerp.modules.examinations.dto.ScheduleInvigilationRequest();
+        conflictReq.setInvigilatorStaffId(teacher.getId());
+        conflictReq.setSubjectName(teacher.getDepartment() != null ? teacher.getDepartment() : "Science");
+        conflictReq.setExamName("Term 2 Exam");
+        conflictReq.setHallRoomNumber("Hall A-1");
+
+        assertThrows(IllegalStateException.class, () -> {
+            examInvigilationService.scheduleInvigilation(conflictReq);
+        }, "Teacher cannot invigilate an exam of their own department/subject");
+
+        // 2. Schedule invigilation duty with a non-conflicting subject
+        var validReq = new com.schoolerp.modules.examinations.dto.ScheduleInvigilationRequest();
+        validReq.setInvigilatorStaffId(teacher.getId());
+        validReq.setSubjectName("Non-Conflicting Subject XYZ");
+        validReq.setExamName("Term 2 Board Exam");
+        validReq.setHallRoomNumber("Hall A-1");
+        validReq.setExamDate(java.time.LocalDate.now());
+
+        var duty = examInvigilationService.scheduleInvigilation(validReq);
+        assertNotNull(duty);
+        assertEquals(teacher.getFullName(), duty.getInvigilatorStaffName());
+        assertTrue(duty.getPaperSealVerified());
+
+        // 3. Verify paper seals
+        var verifyReq = new com.schoolerp.modules.examinations.dto.VerifySealsRequest();
+        verifyReq.setPaperSealVerified(true);
+        verifyReq.setWitnessStaffName("Witness Staff Officer");
+        var verified = examInvigilationService.verifySeals(duty.getId(), verifyReq);
+        assertNotNull(verified);
+        assertEquals("Witness Staff Officer", verified.getWitnessStaffName());
+
+        // 4. Report UFM Malpractice
+        var student = studentRepository.findAll().get(0);
+        var ufmReq = new com.schoolerp.modules.examinations.dto.ReportUfmRequest();
+        ufmReq.setExamScheduleId(duty.getExamScheduleId());
+        ufmReq.setStudentId(student.getId());
+        ufmReq.setSubjectName(duty.getSubjectName());
+        ufmReq.setContrabandType("SMART_WATCH");
+        ufmReq.setInvigilatorRemarks("Student had unauthorized smart watch connected to mobile device");
+        ufmReq.setStudentStatement("I forgot to remove it before the exam started");
+
+        var docket = examInvigilationService.reportUfm(ufmReq);
+        assertNotNull(docket);
+        assertTrue(docket.getDocketNumber().startsWith("UFM-2026-"));
+        assertEquals("UNDER_COMMITTEE_REVIEW", docket.getVerdictStatus());
+        assertEquals("SMART_WATCH", docket.getContrabandType());
+
+        var dockets = examInvigilationService.getUfmDockets("UNDER_COMMITTEE_REVIEW");
+        assertFalse(dockets.isEmpty());
+        assertTrue(dockets.stream().anyMatch(d -> d.getId().equals(docket.getId())));
+    }
+
+    @Test
+    void testBookstorePosCheckoutAndStudentLedgerDebit() {
+        var student = studentRepository.findAll().get(0);
+
+        // 1. Register items
+        var itemReq = new com.schoolerp.modules.operations.dto.RegisterBookstoreItemRequest();
+        itemReq.setSkuCode("SKU-TXT-G10-MATH-" + java.util.UUID.randomUUID().toString().substring(0, 4));
+        itemReq.setItemName("NCERT Mathematics Class 10");
+        itemReq.setItemCategory("TEXTBOOK_BUNDLE");
+        itemReq.setTargetGrade("Grade 10");
+        itemReq.setUnitSellingPrice(BigDecimal.valueOf(450.00));
+        itemReq.setCostPrice(BigDecimal.valueOf(380.00));
+        itemReq.setStockQuantity(50);
+        itemReq.setReorderThreshold(10);
+        itemReq.setSupplierVendorName("Apex Academic Publishing");
+
+        var item = bookstoreService.registerItem(itemReq);
+        assertNotNull(item);
+        assertEquals(50, item.getStockQuantity());
+
+        // 2. Checkout POS Order with STUDENT_LEDGER_DEBIT
+        var checkoutReq = new com.schoolerp.modules.operations.dto.BookstoreCheckoutRequest();
+        checkoutReq.setStudentId(student.getId());
+        checkoutReq.setPaymentMode("STUDENT_LEDGER_DEBIT");
+        checkoutReq.setItems(java.util.List.of(new com.schoolerp.modules.operations.dto.BookstoreCheckoutRequest.CheckoutItem(item.getId(), 2)));
+
+        var order = bookstoreService.checkout(checkoutReq);
+        assertNotNull(order);
+        assertTrue(order.getOrderReceiptNumber().startsWith("BK-REC-2026-"));
+        assertEquals("STUDENT_LEDGER_DEBIT", order.getPaymentMode());
+        assertEquals(BigDecimal.valueOf(900.00).setScale(2), order.getTotalAmount().setScale(2, java.math.RoundingMode.HALF_UP));
+
+        // 3. Verify stock was decremented from 50 to 48
+        var updatedItems = bookstoreService.getItems(null, null);
+        var updatedItem = updatedItems.stream().filter(i -> i.getId().equals(item.getId())).findFirst().orElseThrow();
+        assertEquals(48, updatedItem.getStockQuantity());
+    }
+
+    @Test
+    void testHealthPassportAndCafeteriaAllergenDefenseShield() {
+        var student = studentRepository.findAll().get(0);
+
+        // 1. Save critical health passport with Severe Peanut & Gluten Allergy
+        var passportReq = new com.schoolerp.modules.students.dto.SaveHealthPassportRequest();
+        passportReq.setBloodGroup("O+");
+        passportReq.setHasSevereAllergies(true);
+        passportReq.setAllergenList("PEANUTS,GLUTEN");
+        passportReq.setChronicConditions("ASTHMA");
+        passportReq.setInhalerInInfirmary(true);
+        passportReq.setEpipenPrescribed(true);
+        passportReq.setEmergencyContactPhone("+91-9876543210");
+        passportReq.setTreatingPhysicianName("Dr. Sunita Mehta, Pediatric Allergist");
+        passportReq.setParamedicEmergencyProtocol("Administer EpiPen 0.3mg immediately into outer thigh and call 108");
+
+        var passport = healthPassportService.saveHealthPassport(student.getId(), passportReq);
+        assertNotNull(passport);
+        assertEquals("O+", passport.getBloodGroup());
+        assertTrue(passport.getHasSevereAllergies());
+        assertTrue(passport.getEpipenPrescribed());
+
+        // 2. Intercept Cafeteria POS for peanut-containing snack
+        var hazardCheck = new com.schoolerp.modules.operations.dto.AllergenCheckRequest();
+        hazardCheck.setStudentId(student.getId());
+        hazardCheck.setItemName("Peanut Chikki Energy Bar");
+        hazardCheck.setItemIngredients(java.util.List.of("Jaggery", "Roasted Peanuts", "Cardamom"));
+
+        var hazardResult = cafeteriaAllergenService.checkAllergens(hazardCheck);
+        assertNotNull(hazardResult);
+        assertFalse(hazardResult.getAllowed(), "Peanut snack must be BLOCKED for peanut-allergic student");
+        assertTrue(hazardResult.getMatchedAllergens().contains("Roasted Peanuts"));
+        assertTrue(hazardResult.getWarningMessage().contains("CRITICAL ALLERGEN HAZARD"));
+        assertTrue(hazardResult.getEpiPenRequired());
+
+        // 3. Cafeteria POS for safe allergen-free food
+        var safeCheck = new com.schoolerp.modules.operations.dto.AllergenCheckRequest();
+        safeCheck.setStudentId(student.getId());
+        safeCheck.setItemName("Steamed Basmati Rice & Moong Dal");
+        safeCheck.setItemIngredients(java.util.List.of("Rice", "Moong Dal", "Cumin", "Turmeric"));
+
+        var safeResult = cafeteriaAllergenService.checkAllergens(safeCheck);
+        assertNotNull(safeResult);
+        assertTrue(safeResult.getAllowed(), "Safe lunch without peanuts or gluten must be permitted");
+        assertTrue(safeResult.getMatchedAllergens().isEmpty());
+
+        // 4. Test Event Costume Rental Cycle
+        var costumeReq = new com.schoolerp.modules.operations.dto.RegisterCostumeRequest();
+        costumeReq.setEventName("Shakespeare Festival 2026");
+        costumeReq.setCostumeDescription("Hamlet Royal Velvet Cape - Purple");
+        costumeReq.setVendorSupplierName("Theatrical Wardrobe Ltd");
+        costumeReq.setRentalRatePerDay(BigDecimal.valueOf(150.00));
+
+        var costume = costumeRentalService.registerCostume(costumeReq);
+        assertNotNull(costume);
+        assertEquals("IN_WARDROBE", costume.getReturnCondition());
+
+        // Issue costume to student actor
+        var issueReq = new com.schoolerp.modules.operations.dto.IssueCostumeRequest();
+        issueReq.setCostumeId(costume.getId());
+        issueReq.setStudentId(student.getId());
+        issueReq.setAction("ISSUE");
+        issueReq.setExpectedReturnDate(java.time.LocalDate.now().plusDays(2));
+
+        var issued = costumeRentalService.issueOrReturnCostume(issueReq);
+        assertNotNull(issued);
+        assertEquals("ISSUED_OUT", issued.getReturnCondition());
+        assertEquals(student.getFullName(), issued.getAssignedStudentName());
+
+        // Return costume with damage inspection
+        var returnReq = new com.schoolerp.modules.operations.dto.IssueCostumeRequest();
+        returnReq.setCostumeId(costume.getId());
+        returnReq.setAction("RETURN");
+        returnReq.setReturnCondition("RETURNED_DAMAGED");
+        returnReq.setDamageFineAmount(BigDecimal.valueOf(350.00));
+
+        var returned = costumeRentalService.issueOrReturnCostume(returnReq);
+        assertNotNull(returned);
+        assertEquals("RETURNED_DAMAGED", returned.getReturnCondition());
+        assertEquals(BigDecimal.valueOf(350.00), returned.getDamageFineAmount());
     }
 }
 
