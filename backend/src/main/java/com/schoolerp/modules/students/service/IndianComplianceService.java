@@ -34,6 +34,7 @@ public class IndianComplianceService {
     private final StudentRepository studentRepository;
     private final AuditLogService auditLogService;
 
+    @Transactional
     public List<StudentUdiseProfile> getUdiseProfiles() {
         String tenantId = TenantContext.getTenantId() != null ? TenantContext.getTenantId() : "tenant_apex_mumbai_01";
         List<StudentUdiseProfile> profiles = udiseRepository.findByTenantId(tenantId);

@@ -1,5 +1,6 @@
 package com.schoolerp.modules.students.entity;
 
+import com.schoolerp.common.security.AesGcmAttributeEncryptor;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -31,10 +32,12 @@ public class StudentUdiseProfile {
     @Column(nullable = false)
     private String admissionNumber;
 
-    @Column(length = 20)
+    @Convert(converter = AesGcmAttributeEncryptor.class)
+    @Column(length = 255)
     private String apaarId; // Automated Permanent Academic Account Registry (12 digits)
 
-    @Column(length = 20)
+    @Convert(converter = AesGcmAttributeEncryptor.class)
+    @Column(length = 255)
     private String penNumber; // Permanent Education Number (11 digits issued by MoE)
 
     @Column(nullable = false)

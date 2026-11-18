@@ -55,5 +55,8 @@ public class StudentWallet {
     private String status = "ACTIVE"; // ACTIVE, BLOCKED, SUSPENDED
 
     private LocalDateTime lastTopupAt;
+
+    @Version
+    private Long version;
 }
 

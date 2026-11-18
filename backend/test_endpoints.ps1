@@ -1,4 +1,4 @@
-﻿# Endpoint Verification Script
+# Endpoint Verification Script
 $baseUri = "http://localhost:8080/api/v1"
 $tenantId = "tenant_apex_mumbai_01"
 
@@ -37,6 +37,7 @@ $headers = @{
 $authRes = Invoke-RestMethod -Uri "$baseUri/auth/login" -Method Post -Body $loginBody -Headers $headers
 $token = $authRes.data.token
 $user = $authRes.data.user
+$adminUser = $user
 $tenant = $authRes.data.tenant
 Write-Host "Authenticated successfully!"
 Write-Host " - User: $($user.fullName) ($($user.email))"
@@ -506,7 +507,7 @@ $gradeRes = Invoke-RestMethod -Uri "$baseUri/academics/homework/submissions/$($s
 Write-Host "Submission Graded: Marks = $($gradeRes.data.marksAwarded)/$($hwData.maxMarks) | Feedback: '$($gradeRes.data.teacherFeedback)'"
 
 Write-Host "`n33. Testing Native Kotlin Mobile Parent Home Gateway (GET /api/v1/mobile/parent/home)..."
-$mobileRes = Invoke-RestMethod -Uri "$baseUri/mobile/parent/home?guardianEmail=rajesh.sharma@example.com" -Method Get
+$mobileRes = Invoke-RestMethod -Uri "$baseUri/mobile/parent/home?guardianEmail=rajesh.sharma@example.com" -Method Get -Headers $authHeaders
 $m = $mobileRes.data
 Write-Host "Parent Mobile Home Gateway Aggregated for $($m.guardianName) ($($m.guardianEmail)):"
 Write-Host " - Total Children in Family: $($m.totalChildren)"
@@ -2872,7 +2873,7 @@ Write-Host "`n[Endpoint 238] POST /api/v1/admissions/desk/queue/call-next (Call 
 $callReq = @{
     counterName = "Counter 2 - Document Verification Desk"
     preferredCategory = "DOCUMENT_VERIFICATION"
-    officerId = $user.id
+    officerId = $adminUser.id
 } | ConvertTo-Json
 $callRes = Invoke-RestMethod -Uri "$baseUri/admissions/desk/queue/call-next" -Method Post -Body $callReq -Headers $authHeaders
 $calledDto = $callRes.data
@@ -2914,7 +2915,7 @@ $sellReq = @{
     buyerPhone = "9820123456"
     paymentMode = "UPI_QR"
     transactionRef = "UPI-HDFC-882711"
-    soldByUserId = $user.id
+    soldByUserId = $adminUser.id
     linkedInquiryId = [System.Guid]::NewGuid().ToString()
 } | ConvertTo-Json
 $sellRes = Invoke-RestMethod -Uri "$baseUri/admissions/desk/prospectus/sell-kit" -Method Post -Body $sellReq -Headers $authHeaders
@@ -2937,7 +2938,7 @@ $undertakingReq = @{
     missingDocumentName = "Previous School TC with DEO Counter-Signature"
     reasonCode = "PENDING_PREVIOUS_SCHOOL_CLEARANCE"
     deadlineDate = (Get-Date).AddDays(30).ToString("yyyy-MM-dd")
-    verifiedByOfficerId = $user.id
+    verifiedByOfficerId = $adminUser.id
     parentSignatureAck = $true
 } | ConvertTo-Json
 $undRes = Invoke-RestMethod -Uri "$baseUri/admissions/desk/undertakings/issue" -Method Post -Body $undertakingReq -Headers $authHeaders
@@ -2970,7 +2971,7 @@ $mintReq = @{
     rollNumber = "19"
     houseName = "Falcons"
     canteenInitialBalance = 750.00
-    mintedByUserId = $user.id
+    mintedByUserId = $adminUser.id
 } | ConvertTo-Json
 $mintRes = Invoke-RestMethod -Uri "$baseUri/admissions/desk/onboarding/mint-identity" -Method Post -Body $mintReq -Headers $authHeaders
 $dossier = $mintRes.data
@@ -3018,7 +3019,7 @@ $surrenderProcReq = @{
     totalFeesPaid = 120000.00
     deductionPercentage = $calc.deductionPercentage
     waitlistStudentPromotedId = $promotedWaitlistId
-    authorizedByUserId = $user.id
+    authorizedByUserId = $adminUser.id
 } | ConvertTo-Json
 $surrRes = Invoke-RestMethod -Uri "$baseUri/admissions/desk/surrender/process" -Method Post -Body $surrenderProcReq -Headers $authHeaders
 $surrDto = $surrRes.data

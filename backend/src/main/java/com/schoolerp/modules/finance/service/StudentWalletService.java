@@ -117,7 +117,7 @@ public class StudentWalletService {
             throw new IllegalArgumentException("Transaction amount must be strictly positive");
         }
 
-        StudentWallet wallet = walletRepository.findByTenantIdAndRfidCardNumber(activeTenantId, rfidCardNumber)
+        StudentWallet wallet = walletRepository.findByTenantIdAndRfidCardNumberForUpdate(activeTenantId, rfidCardNumber)
                 .orElseThrow(() -> new IllegalArgumentException("Unrecognized RFID smart card: " + rfidCardNumber));
 
         if (!"ACTIVE".equalsIgnoreCase(wallet.getStatus())) {

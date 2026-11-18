@@ -53,4 +53,7 @@ public class BookstoreInventoryItem {
 
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
+
+    @Version
+    private Long version;
 }

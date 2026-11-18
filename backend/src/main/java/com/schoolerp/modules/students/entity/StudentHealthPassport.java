@@ -1,5 +1,6 @@
 package com.schoolerp.modules.students.entity;
 
+import com.schoolerp.common.security.AesGcmAttributeEncryptor;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -35,6 +36,7 @@ public class StudentHealthPassport {
     @Column(columnDefinition = "TEXT")
     private String allergenList; // Comma-separated: "PEANUTS,GLUTEN,DAIRY"
 
+    @Convert(converter = AesGcmAttributeEncryptor.class)
     @Column(columnDefinition = "TEXT")
     private String chronicConditions; // "ASTHMA,TYPE_1_DIABETES"
 
@@ -49,6 +51,7 @@ public class StudentHealthPassport {
 
     private String treatingPhysicianName;
 
+    @Convert(converter = AesGcmAttributeEncryptor.class)
     @Column(nullable = false, columnDefinition = "TEXT")
     private String paramedicEmergencyProtocol;
 

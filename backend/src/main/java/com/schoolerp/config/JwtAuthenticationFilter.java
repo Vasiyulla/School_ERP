@@ -41,11 +41,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String email = claims.getSubject();
                 String tokenTenantId = (String) claims.get("tenantId");
 
-                // Ensure token tenant matches request tenant context
-                String currentTenant = TenantContext.getTenantId();
-                if (tokenTenantId != null && !tokenTenantId.equalsIgnoreCase(currentTenant)) {
-                    log.warn("Tenant mismatch: Request tenant='{}', Token tenant='{}'", currentTenant, tokenTenantId);
-                    // Override context with the authenticated tenant
+                // Strictly enforce tenant isolation: Token tenant must match requested tenant header
+                if (tokenTenantId != null) {
+                    String requestedTenant = request.getHeader("X-Tenant-ID");
+                    if (requestedTenant != null && !requestedTenant.isBlank() && !requestedTenant.equalsIgnoreCase(tokenTenantId)) {
+                        log.warn("Security Alert: Cross-tenant access attempt blocked. Token tenant='{}', Requested tenant='{}'",
+                                tokenTenantId, requestedTenant);
+                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                        response.setContentType("application/json");
+                        response.getWriter().write("{\"success\":false,\"message\":\"Access denied: Token tenant does not match requested tenant context.\"}");
+                        return;
+                    }
                     TenantContext.setTenantId(tokenTenantId);
                 }
 

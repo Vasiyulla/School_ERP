@@ -36,6 +36,29 @@ public class AdmissionDeskService {
     private final AtomicInteger admissionSequence = new AtomicInteger(5000);
     private final AtomicInteger surrenderSequence = new AtomicInteger(200);
 
+    private synchronized int nextTokenSequence(String tenantId) {
+        long count = queueTokenRepository.countByTenantIdAndStatus(tenantId, "WAITING")
+                   + queueTokenRepository.countByTenantIdAndStatus(tenantId, "COMPLETED")
+                   + queueTokenRepository.countByTenantIdAndStatus(tenantId, "CALLED");
+        return tokenSequence.updateAndGet(curr -> Math.max(curr + 1, (int) count + 101));
+    }
+
+    private synchronized int nextUndertakingSequence(String tenantId) {
+        long count = undertakingRepository.countByTenantIdAndStatus(tenantId, "PENDING")
+                   + undertakingRepository.countByTenantIdAndStatus(tenantId, "FULFILLED");
+        return undertakingSequence.updateAndGet(curr -> Math.max(curr + 1, (int) count + 1001));
+    }
+
+    private synchronized int nextAdmissionSequence(String tenantId) {
+        long count = welcomeDossierRepository.findByTenantIdOrderByCreatedAtDesc(tenantId).size();
+        return admissionSequence.updateAndGet(curr -> Math.max(curr + 1, (int) count + 5001));
+    }
+
+    private synchronized int nextSurrenderSequence(String tenantId) {
+        long count = seatSurrenderRepository.findByTenantIdOrderByCreatedAtDesc(tenantId).size();
+        return surrenderSequence.updateAndGet(curr -> Math.max(curr + 1, (int) count + 201));
+    }
+
     private String resolveTenantId() {
         return TenantContext.getTenantId() != null ? TenantContext.getTenantId() : "tenant_apex_mumbai_01";
     }
@@ -54,7 +77,7 @@ public class AdmissionDeskService {
             case "PRINCIPAL_INTERVIEW" -> "TKN-PRN";
             default -> "TKN-ENQ";
         };
-        String tokenNum = prefix + "-" + tokenSequence.incrementAndGet();
+        String tokenNum = prefix + "-" + nextTokenSequence(tenantId);
 
         AdmissionQueueToken token = AdmissionQueueToken.builder()
                 .tenantId(tenantId)
@@ -236,7 +259,7 @@ public class AdmissionDeskService {
     @Transactional
     public AdmissionDocumentUndertakingDTO issueUndertaking(IssueUndertakingRequest req) {
         String tenantId = resolveTenantId();
-        String undertakingNum = "UNDERTAKING-" + LocalDate.now().getYear() + "-" + undertakingSequence.incrementAndGet();
+        String undertakingNum = "UNDERTAKING-" + LocalDate.now().getYear() + "-" + nextUndertakingSequence(tenantId);
 
         AdmissionDocumentUndertaking undertaking = AdmissionDocumentUndertaking.builder()
                 .tenantId(tenantId)
@@ -297,7 +320,7 @@ public class AdmissionDeskService {
     @Transactional
     public AdmissionWelcomeDossierDTO mintStudentIdentity(MintIdentityRequest req) {
         String tenantId = resolveTenantId();
-        String admNo = "ADM-" + LocalDate.now().getYear() + "-" + admissionSequence.incrementAndGet();
+        String admNo = "ADM-" + LocalDate.now().getYear() + "-" + nextAdmissionSequence(tenantId);
 
         AdmissionWelcomeDossier dossier = AdmissionWelcomeDossier.builder()
                 .tenantId(tenantId)
@@ -395,7 +418,7 @@ public class AdmissionDeskService {
     @Transactional
     public AdmissionSeatSurrenderDTO processSeatSurrender(ProcessSeatSurrenderRequest req) {
         String tenantId = resolveTenantId();
-        String surrenderRef = "SURR-" + req.getSurrenderDate().getYear() + "-" + surrenderSequence.incrementAndGet();
+        String surrenderRef = "SURR-" + req.getSurrenderDate().getYear() + "-" + nextSurrenderSequence(tenantId);
 
         BigDecimal deductionAmount = req.getTotalFeesPaid()
                 .multiply(req.getDeductionPercentage())

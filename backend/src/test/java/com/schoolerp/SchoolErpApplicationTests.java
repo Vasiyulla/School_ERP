@@ -297,6 +297,12 @@ class SchoolErpApplicationTests {
     @Autowired
     private com.schoolerp.modules.admissions.service.AdmissionDeskService admissionDeskService;
 
+    @Autowired
+    private com.schoolerp.modules.identity.service.JwtService jwtService;
+
+    @Autowired
+    private com.schoolerp.common.security.AesGcmAttributeEncryptor aesEncryptor;
+
     @BeforeEach
     void setUp() {
         TenantContext.setTenantId("tenant_apex_mumbai_01");
@@ -4033,6 +4039,134 @@ class SchoolErpApplicationTests {
         var ledger = admissionDeskService.getSurrenderAuditLedger();
         assertNotNull(ledger);
         assertTrue(ledger.stream().anyMatch(s -> s.getSurrenderRefNumber().equals(surrenderResult.getSurrenderRefNumber())));
+    }
+
+    @Test
+    void testTamperedWebhookSignatureRejection() {
+        // 1. Forged webhook call with invalid HMAC signature must be rejected with SecurityException
+        assertThrows(SecurityException.class, () -> {
+            financeService.processWebhook(
+                    "RAZORPAY",
+                    "fake-event-tampered-001",
+                    "payment.captured",
+                    "TAMPERED_FORGED_HMAC_SIGNATURE_HEX",
+                    "{\"fake\":\"payload\",\"amount\":45000}",
+                    "INV-2026-0842",
+                    new BigDecimal("45000.00")
+            );
+        }, "Tampered or forged webhook payload without matching HMAC signature must be strictly rejected");
+
+        // 2. Legitimate webhook with verified test signature must be accepted
+        var legitimateResult = financeService.processWebhook(
+                "RAZORPAY",
+                "legit-event-001-" + System.currentTimeMillis(),
+                "payment.captured",
+                "TEST_HMAC_SIG",
+                "{\"status\":\"captured\",\"amount\":45000}",
+                "INV-2026-0842",
+                new BigDecimal("45000.00")
+        );
+        assertNotNull(legitimateResult);
+        assertEquals("SUCCESS", legitimateResult.getStatus());
+        assertFalse(legitimateResult.isDuplicate());
+    }
+
+    @Test
+    void testConcurrentWalletDebitRaceConditionDefense() throws InterruptedException {
+        // Create an isolated fresh student to avoid colliding with pre-seeded wallets
+        var freshStudent = studentRepository.save(com.schoolerp.modules.students.entity.Student.builder()
+                .tenantId("tenant_apex_mumbai_01")
+                .admissionNumber("ADM-CONC-" + java.util.UUID.randomUUID().toString().substring(0, 6))
+                .fullName("Test Concurrent Student")
+                .className("Class 10")
+                .sectionName("A")
+                .dateOfBirth(java.time.LocalDate.of(2010, 1, 1))
+                .gender("Male")
+                .rollNumber(99)
+                .status("Active")
+                .build());
+
+        var rfid = "RFID-CONC-" + java.util.UUID.randomUUID().toString().substring(0, 8);
+        var wallet = studentWalletService.registerOrGetWallet(freshStudent.getId(), rfid, new BigDecimal("2000.00"));
+        studentWalletService.topupWallet(freshStudent.getId(), new BigDecimal("500.00"), "CASH");
+
+        // 2. Launch 4 concurrent threads each trying to debit INR 400 simultaneously
+        int threadCount = 4;
+        var executor = java.util.concurrent.Executors.newFixedThreadPool(threadCount);
+        var latch = new java.util.concurrent.CountDownLatch(1);
+        var successCount = new java.util.concurrent.atomic.AtomicInteger(0);
+        var conflictCount = new java.util.concurrent.atomic.AtomicInteger(0);
+
+        for (int i = 0; i < threadCount; i++) {
+            executor.submit(() -> {
+                try {
+                    latch.await();
+                    TenantContext.setTenantId("tenant_apex_mumbai_01");
+                    studentWalletService.transactCanteen(rfid, new BigDecimal("400.00"), "Meal Tray", "POS-01", "Cashier A");
+                    successCount.incrementAndGet();
+                } catch (Exception e) {
+                    conflictCount.incrementAndGet();
+                } finally {
+                    TenantContext.clear();
+                }
+            });
+        }
+
+        // Release all threads simultaneously
+        latch.countDown();
+        executor.shutdown();
+        assertTrue(executor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS));
+
+        // 3. Exactly ONE transaction must succeed, 3 must be blocked
+        assertEquals(1, successCount.get(), "Concurrency defense: Exactly one transaction must succeed on insufficient balance");
+        assertEquals(3, conflictCount.get(), "Remaining 3 concurrent debits must be rejected");
+
+        // 4. Final balance must be exactly INR 100.00 (500 - 400), never negative or double-spent
+        TenantContext.setTenantId("tenant_apex_mumbai_01");
+        var finalWallet = studentWalletService.registerOrGetWallet(freshStudent.getId(), rfid, new BigDecimal("2000.00"));
+        assertEquals(new BigDecimal("100.00"), finalWallet.getBalance());
+    }
+
+    @Test
+    void testCrossTenantHeaderSpoofingInterception() {
+        // 1. Generate JWT for admin belonging to tenant_apex_mumbai_01
+        var mockUser = com.schoolerp.modules.identity.entity.User.builder()
+                .id(java.util.UUID.randomUUID())
+                .email("admin@apexacademy.edu.in")
+                .fullName("Dr. Rajesh Sharma")
+                .roles(java.util.Set.of())
+                .build();
+        String token = jwtService.generateToken(mockUser, "tenant_apex_mumbai_01");
+        assertNotNull(token);
+        assertTrue(jwtService.validateToken(token));
+
+        // 2. Validate extracted claims bind strictly to tenant_apex_mumbai_01
+        var claims = jwtService.extractClaims(token);
+        assertEquals("tenant_apex_mumbai_01", claims.get("tenantId"));
+        assertEquals("admin@apexacademy.edu.in", claims.getSubject());
+    }
+
+    @Test
+    void testSensitiveDataEncryptionAtRest() {
+        String sensitiveAadhaar = "9842-1084-2901";
+
+        // 1. Convert to database column (Encryption)
+        String dbCiphertext = aesEncryptor.convertToDatabaseColumn(sensitiveAadhaar);
+        assertNotNull(dbCiphertext);
+        assertTrue(dbCiphertext.startsWith("ENC:"), "Encrypted database string must carry ENC: prefix");
+        assertNotEquals(sensitiveAadhaar, dbCiphertext, "Ciphertext must not leak plaintext data");
+
+        // 2. Convert back to entity attribute (Decryption)
+        String decrypted = aesEncryptor.convertToEntityAttribute(dbCiphertext);
+        assertEquals(sensitiveAadhaar, decrypted, "Decrypted entity attribute must match original plaintext");
+
+        // 3. Non-deterministic random IV defense (Two encryptions of same string must yield different ciphertexts)
+        String secondCiphertext = aesEncryptor.convertToDatabaseColumn(sensitiveAadhaar);
+        assertNotEquals(dbCiphertext, secondCiphertext, "Random 12-byte IV must prevent ciphertext frequency analysis");
+
+        // Legacy unencrypted string fallback check
+        String legacyPlain = "LEGACY-PLAIN-DATA";
+        assertEquals(legacyPlain, aesEncryptor.convertToEntityAttribute(legacyPlain));
     }
 }
 

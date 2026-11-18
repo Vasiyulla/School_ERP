@@ -50,28 +50,34 @@ public class SecurityConfig {
                                 "/api/v1/students/transfer-certificates/verify/**",
                                 "/api/v1/students/certificates/verify/**",
                                 "/api/v1/staff/payroll/biometric/punch",
+                                "/api/v1/attendance/biometric/**",
                                 "/api/v1/operations/telemetry/**",
                                 "/api/v1/operations/gate-passes/verify-scan",
-                                "/api/v1/mobile/**",
                                 "/api/v1/admissions/crm/portal/**",
                                 "/api/v1/admissions/crm/entrance-tests/admit-card/**",
                                 "/h2-console/**",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
-                                "/actuator/**"
+                                "/actuator/health",
+                                "/actuator/info",
+                                "/actuator/prometheus"
                         ).permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        // Protected endpoints with role checking
+                        // Hardened Actuator Access (Only Super Admin can access full actuator telemetry)
+                        .requestMatchers("/actuator/**").hasRole("SUPER_ADMIN")
+                        // Mobile Parent/Student API requires valid authentication
+                        .requestMatchers("/api/v1/mobile/**").authenticated()
+                        // Protected endpoints with role checking aligned with method-level security
                         .requestMatchers("/api/v1/system/**").hasAnyRole("SUPER_ADMIN", "ADMIN", "PRINCIPAL", "TEACHER", "STAFF")
-                        .requestMatchers("/api/v1/communication/**").hasAnyRole("SUPER_ADMIN", "TEACHER", "PRINCIPAL")
-                        .requestMatchers("/api/v1/finance/**").hasAnyRole("SUPER_ADMIN", "ACCOUNTANT")
-                        .requestMatchers("/api/v1/attendance/**").hasAnyRole("SUPER_ADMIN", "TEACHER", "PRINCIPAL")
-                        .requestMatchers("/api/v1/examinations/**").hasAnyRole("SUPER_ADMIN", "TEACHER", "PRINCIPAL")
-                        .requestMatchers("/api/v1/students/**").hasAnyRole("SUPER_ADMIN", "TEACHER", "PRINCIPAL", "ACCOUNTANT")
-                        .requestMatchers("/api/v1/admissions/**").hasAnyRole("SUPER_ADMIN", "PRINCIPAL")
-                        .requestMatchers("/api/v1/academics/**").hasAnyRole("SUPER_ADMIN", "TEACHER", "PRINCIPAL")
-                        .requestMatchers("/api/v1/staff/**").hasAnyRole("SUPER_ADMIN", "TEACHER", "PRINCIPAL")
-                        .requestMatchers("/api/v1/operations/**").hasAnyRole("SUPER_ADMIN", "TEACHER", "PRINCIPAL", "ACCOUNTANT")
+                        .requestMatchers("/api/v1/communication/**").hasAnyRole("SUPER_ADMIN", "ADMIN", "TEACHER", "PRINCIPAL", "STAFF", "PARENT", "STUDENT")
+                        .requestMatchers("/api/v1/finance/**").hasAnyRole("SUPER_ADMIN", "ADMIN", "PRINCIPAL", "ACCOUNTANT", "FRONT_DESK", "ADMISSION_OFFICER")
+                        .requestMatchers("/api/v1/attendance/**").hasAnyRole("SUPER_ADMIN", "ADMIN", "TEACHER", "PRINCIPAL", "STAFF")
+                        .requestMatchers("/api/v1/examinations/**").hasAnyRole("SUPER_ADMIN", "ADMIN", "TEACHER", "PRINCIPAL", "STAFF")
+                        .requestMatchers("/api/v1/students/**").hasAnyRole("SUPER_ADMIN", "ADMIN", "TEACHER", "PRINCIPAL", "ACCOUNTANT", "STAFF", "PARENT", "STUDENT")
+                        .requestMatchers("/api/v1/admissions/**").hasAnyRole("SUPER_ADMIN", "ADMIN", "PRINCIPAL", "ADMISSION_OFFICER", "FRONT_DESK", "ACCOUNTANT")
+                        .requestMatchers("/api/v1/academics/**").hasAnyRole("SUPER_ADMIN", "ADMIN", "TEACHER", "PRINCIPAL", "STAFF", "STUDENT")
+                        .requestMatchers("/api/v1/staff/**").hasAnyRole("SUPER_ADMIN", "ADMIN", "TEACHER", "PRINCIPAL", "STAFF", "ACCOUNTANT")
+                        .requestMatchers("/api/v1/operations/**").hasAnyRole("SUPER_ADMIN", "ADMIN", "TEACHER", "PRINCIPAL", "ACCOUNTANT", "FRONT_DESK", "STAFF")
                         .anyRequest().authenticated()
                 )
                 // Allow H2 console frames for dev
