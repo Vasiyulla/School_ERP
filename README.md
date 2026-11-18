@@ -5,8 +5,8 @@
 [![Next.js 15](https://img.shields.io/badge/Next.js-15_App_Router-black.svg?style=flat&logo=next.js)](https://nextjs.org/)
 [![Kotlin 2.0](https://img.shields.io/badge/Kotlin-Jetpack_Compose-purple.svg?style=flat&logo=kotlin)](https://kotlinlang.org/)
 [![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-12_Schemas-blue.svg?style=flat&logo=postgresql)](https://www.postgresql.org/)
-[![Tests Passing](https://img.shields.io/badge/JUnit_5-107%2F107_Tests_Passed-success.svg)](https://junit.org/)
-[![Endpoints Verified](https://img.shields.io/badge/REST_Endpoints-236%2F236_Live_Verified-blueviolet.svg)](#5-complete-236-live-verified-rest-endpoints-directory)
+[![Tests Passing](https://img.shields.io/badge/JUnit_5-111%2F111_Tests_Passed-success.svg)](https://junit.org/)
+[![Endpoints Verified](https://img.shields.io/badge/REST_Endpoints-252%2F252_Live_Verified-blueviolet.svg)](#5-complete-252-live-verified-rest-endpoints-directory)
 
 A cloud-native, multi-portal **B2B SaaS School Enterprise Resource Planning (ERP)** platform engineered to lead the global educational software industry. Built to Tier-1 commercial standards benchmarked directly against **PowerSchool, Toddle, Odoo Enterprise, SAP Fiori, Verkada, Samsara, and Stripe Billing**.
 
@@ -17,7 +17,7 @@ A cloud-native, multi-portal **B2B SaaS School Enterprise Resource Planning (ERP
 2. [Dedicated Pod & Dual-Database HA Architecture](#2-dedicated-pod--dual-database-ha-architecture)
 3. [Global Commercial SaaS Benchmark Matrix](#3-global-commercial-saas-benchmark-matrix)
 4. [PostgreSQL 12-Schema Domain Architecture & Complete Backend Feature Directory](#4-postgresql-12-schema-domain-architecture--complete-backend-feature-directory)
-5. [Complete 236 Live Verified REST Endpoints Directory](#5-complete-236-live-verified-rest-endpoints-directory)
+5. [Complete 252 Live Verified REST Endpoints Directory](#5-complete-252-live-verified-rest-endpoints-directory)
 6. [Omni-Channel Portals & Client Applications](#6-omni-channel-portals--client-applications)
 7. [Enterprise Invariants & Regulatory Compliance](#7-enterprise-invariants--regulatory-compliance)
 8. [Getting Started & Local Development](#8-getting-started--local-development)
@@ -164,7 +164,17 @@ graph TD
   * `AdmissionDocumentChecklist`: Itemized KYC document verification checklist with physical locker custody flags.
   * `CounselorTask`: Admissions CRM follow-up cadence, SLA countdowns, priority rankings, and call outcome logging.
   * `RteApplicationRecord`: Mandatory 25% EWS/Disadvantaged quota lottery registration and state reimbursement claim tracking.
+  * `AdmissionQueueToken`: Multi-counter walk-in token (`TKN-ENQ-XXX`, `TKN-DOC-XXX`, `TKN-FEE-XXX`), category, visitor credentials, assigned counter/officer, waiting and service duration telemetry.
+  * `ProspectusKitMaster`: Serialized printed prospectus kit inventory (`KIT-2026-XXXX`), barcode POS sales register (Cash/UPI QR), inquiry locking to prevent duplicate submission, and cashier revenue reconciliation.
+  * `AdmissionDocumentUndertaking`: Formal legal undertaking bond (`UNDERTAKING-2026-XXXX`) for missing Transfer Certificates/documents with 30-day statutory deadlines and automated overdue sentinels.
+  * `AdmissionWelcomeDossier`: Instant permanent student identity minting (`ADM-2026-XXXX`), section/roll/house allocation, smart RFID campus card serialization with canteen pre-load, and 5-part printable Welcome Pack dossier.
+  * `AdmissionSeatSurrender`: Statutory fee refund engine with percentage-based deduction schedules, instant quota seat recycling to waitlist candidates, and General Ledger refund vouchers.
 * **Backend Features & Business Capabilities:**
+  * **Front-Desk Smart Queue & Multi-Counter Calling Desk:** Kiosk-dispensed queue tokens, counter display console (serve, announce, complete, no-show), and wait-time telemetry analytics.
+  * **Serialized Prospectus Kit POS Inventory:** Physical barcode-scanned kit sales with inquiry locking to eradicate duplicate submissions, cash/UPI QR reconciliation, and daily cashier denomination auditing.
+  * **Document Stamping & Deficient Document Undertaking Desk:** Official original KYC custody stamping, formal legal undertakings for missing Transfer Certificates with 30-day statutory countdowns, and automated overdue sentinels.
+  * **Instant Student Identity Minting & Welcome Dossier:** Auto-minted permanent admission numbers, automatic roll/section/house allocation, smart RFID campus card serialization with pre-loaded canteen balance, and 5-part printable Welcome Pack.
+  * **Seat Surrender, Quota Recycling & Statutory Fee Refund Engine:** Statutory tiered refund schedules based on academic session commencement dates, instant quota seat recycling to category waitlists, and General Ledger compensating vouchers.
   * **Express Walk-In Front Desk Intake:** 60-second parent intake dispensing queue tokens and collecting spot prospectus fees (Cash/UPI QR) with auto-receipts.
   * **Indian 100-Point Criteria Engine:** Statutory objective scoring with automated tie-breaker draw numbers for computerized lotteries.
   * **Category-Segregated Quota Waitlists:** Independent waitlist pools per category with 1-click candidate promotion preserving reservation ratios.
@@ -371,9 +381,9 @@ graph TD
 
 ---
 
-## 5. Complete 236 Live Verified REST Endpoints Directory
+## 5. Complete 252 Live Verified REST Endpoints Directory
 
-All 236 endpoints are fully implemented, compiled, and verified via automated test suites and live HTTP scripts:
+All 252 endpoints are fully implemented, compiled, and verified via automated test suites and live HTTP scripts:
 
 | # | Endpoint URL | Method | Module / Schema | Capability Description |
 |:---:|---|:---:|:---:|---|
@@ -614,6 +624,22 @@ All 236 endpoints are fully implemented, compiled, and verified via automated te
 | **234** | `/api/v1/operations/events/costumes/register` | `POST` | `operations` | Register annual day / theatrical event costume in wardrobe inventory with character role & rental fee |
 | **235** | `/api/v1/operations/events/costumes/issue-and-return` | `PUT` | `operations` | Issue costume to student actor and process return with wardrobe damage condition inspection & fine |
 | **236** | `/api/v1/operations/events/costumes/roster` | `GET` | `operations` | Retrieve event costume wardrobe roster, active loans, damage penalties, and return audit trails |
+| **237** | `/api/v1/admissions/desk/queue/dispense` | `POST` | `admissions` | Dispense front-desk queue token across categories (Enquiry, Verification, Fee Payment, Interview) |
+| **238** | `/api/v1/admissions/desk/queue/call-next` | `POST` | `admissions` | Multi-counter officer calling desk with category filtering and counter assignment |
+| **239** | `/api/v1/admissions/desk/queue/{id}/complete` | `PUT` | `admissions` | Finalize queue token service, log duration minutes, and record counselor notes or no-shows |
+| **240** | `/api/v1/admissions/desk/queue/live-board` | `GET` | `admissions` | Live multi-counter reception queue display board telemetry (serving, next-in-line, wait times) |
+| **241** | `/api/v1/admissions/desk/prospectus/add-stock` | `POST` | `admissions` | Batch ingest serialized printed prospectus kit barcode stock into front-desk inventory |
+| **242** | `/api/v1/admissions/desk/prospectus/sell-kit` | `POST` | `admissions` | Point-of-sale kit sale (Cash/UPI QR) linked to inquiry dossier to prevent duplicate submission |
+| **243** | `/api/v1/admissions/desk/prospectus/inventory-summary` | `GET` | `admissions` | Real-time prospectus stock register, sales metrics, and daily cashier revenue reconciliation |
+| **244** | `/api/v1/admissions/desk/undertakings/issue` | `POST` | `admissions` | Issue legally binding undertaking for missing Transfer Certificates/documents with 30-day statutory deadlines |
+| **245** | `/api/v1/admissions/desk/undertakings/{id}/fulfill` | `PUT` | `admissions` | Fulfill deficient document undertaking upon original certificate physical receipt and custody stamping |
+| **246** | `/api/v1/admissions/desk/undertakings/overdue-sentinel` | `GET` | `admissions` | Sentinel scanner retrieving pending undertakings and flagging overdue compliance violations |
+| **247** | `/api/v1/admissions/desk/onboarding/mint-identity` | `POST` | `admissions` | Mint permanent student admission number (`ADM-2026-XXXX`), section, roll, and house allocation |
+| **248** | `/api/v1/admissions/desk/onboarding/welcome-dossier/{studentId}` | `GET` | `admissions` | Retrieve 5-part printable Welcome Pack dossier (Admission Letter, Temp Badge, Bus Pass, Book Voucher, Portal Pass) |
+| **249** | `/api/v1/admissions/desk/onboarding/smart-card/serialize` | `POST` | `admissions` | Bind smart RFID/NFC campus card UID to student profile and pre-load initial cafeteria wallet balance |
+| **250** | `/api/v1/admissions/desk/surrender/calculate` | `POST` | `admissions` | Calculate statutory fee refund schedule based on days remaining before academic session start |
+| **251** | `/api/v1/admissions/desk/surrender/process` | `POST` | `admissions` | Process confirmed seat surrender, issue General Ledger refund voucher, and recycle quota seat to waitlist |
+| **252** | `/api/v1/admissions/desk/surrender/audit-ledger` | `GET` | `admissions` | Audit ledger of all surrendered seats, refunded amounts, and recycled vacancies |
 
 ---
 

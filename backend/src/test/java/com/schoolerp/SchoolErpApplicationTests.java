@@ -294,6 +294,9 @@ class SchoolErpApplicationTests {
     @Autowired
     private com.schoolerp.modules.operations.service.CostumeRentalService costumeRentalService;
 
+    @Autowired
+    private com.schoolerp.modules.admissions.service.AdmissionDeskService admissionDeskService;
+
     @BeforeEach
     void setUp() {
         TenantContext.setTenantId("tenant_apex_mumbai_01");
@@ -3796,6 +3799,240 @@ class SchoolErpApplicationTests {
         assertNotNull(returned);
         assertEquals("RETURNED_DAMAGED", returned.getReturnCondition());
         assertEquals(BigDecimal.valueOf(350.00), returned.getDamageFineAmount());
+    }
+
+    @Test
+    void testAdmissionTokenQueueDispenserAndCounterCalling() {
+        // 1. Dispense tokens across multiple categories
+        var enqReq = com.schoolerp.modules.admissions.dto.DispenseQueueTokenRequest.builder()
+                .category("ENQUIRY")
+                .visitorName("Rajesh Sharma")
+                .visitorPhone("9820011223")
+                .studentName("Aarav Sharma")
+                .gradeApplying("Class 5")
+                .notes("Interested in CBSE curriculum & robotics club")
+                .build();
+        var enqToken = admissionDeskService.dispenseQueueToken(enqReq);
+        assertNotNull(enqToken);
+        assertTrue(enqToken.getTokenNumber().startsWith("TKN-ENQ-"));
+        assertEquals("WAITING", enqToken.getStatus());
+
+        var docReq = com.schoolerp.modules.admissions.dto.DispenseQueueTokenRequest.builder()
+                .category("DOCUMENT_VERIFICATION")
+                .visitorName("Sunita Patel")
+                .visitorPhone("9820044556")
+                .studentName("Diya Patel")
+                .gradeApplying("Class 1")
+                .notes("Original Birth Certificate & Aadhaar Card verification")
+                .build();
+        var docToken = admissionDeskService.dispenseQueueToken(docReq);
+        assertNotNull(docToken);
+        assertTrue(docToken.getTokenNumber().startsWith("TKN-DOC-"));
+
+        // 2. Call next token to Counter 1 with DOCUMENT_VERIFICATION preference
+        var officerId = java.util.UUID.randomUUID();
+        var callReq = com.schoolerp.modules.admissions.dto.CallNextTokenRequest.builder()
+                .counterName("Counter 1 - Admissions Desk")
+                .preferredCategory("DOCUMENT_VERIFICATION")
+                .officerId(officerId)
+                .build();
+        var calledToken = admissionDeskService.callNextToken(callReq);
+        assertNotNull(calledToken);
+        assertEquals(docToken.getTokenNumber(), calledToken.getTokenNumber());
+        assertEquals("CALLED", calledToken.getStatus());
+        assertEquals("Counter 1 - Admissions Desk", calledToken.getAssignedCounter());
+        assertEquals(officerId, calledToken.getAssignedOfficerId());
+
+        // 3. Complete token service
+        var completeReq = com.schoolerp.modules.admissions.dto.CompleteTokenRequest.builder()
+                .outcomeStatus("COMPLETED")
+                .serviceMinutes(12)
+                .remarks("All KYC originals verified and stamped")
+                .build();
+        var completed = admissionDeskService.completeToken(calledToken.getId(), completeReq);
+        assertNotNull(completed);
+        assertEquals("COMPLETED", completed.getStatus());
+        assertEquals(12, completed.getServiceMinutes());
+
+        // 4. Verify live queue display board state
+        var board = admissionDeskService.getLiveQueueBoard();
+        assertNotNull(board);
+        assertTrue(board.getTotalWaiting() >= 1);
+        assertTrue(board.getTotalCompletedToday() >= 1);
+    }
+
+    @Test
+    void testProspectusKitInventoryIngestionAndPointOfSale() {
+        // 1. Add prospectus kit stock
+        var stockReq = com.schoolerp.modules.admissions.dto.AddProspectusStockRequest.builder()
+                .academicYear("2026-2027")
+                .price(new BigDecimal("1500.00"))
+                .serialBarcodes(java.util.List.of("KIT-2026-9001", "KIT-2026-9002", "KIT-2026-9003", "KIT-2026-9004"))
+                .build();
+        var added = admissionDeskService.addProspectusStock(stockReq);
+        assertNotNull(added);
+        assertEquals(4, added.size());
+
+        // 2. Sell prospectus kit at front desk POS via UPI QR
+        var sellReq = com.schoolerp.modules.admissions.dto.SellProspectusKitRequest.builder()
+                .serialBarcode("KIT-2026-9001")
+                .buyerParentName("Kavita Rao")
+                .buyerPhone("9876543210")
+                .paymentMode("UPI_QR")
+                .transactionRef("UPI-AXIS-9918231")
+                .soldByUserId(java.util.UUID.randomUUID())
+                .linkedInquiryId(java.util.UUID.randomUUID())
+                .build();
+        var soldKit = admissionDeskService.sellProspectusKit(sellReq);
+        assertNotNull(soldKit);
+        assertEquals("SOLD", soldKit.getStatus());
+        assertEquals("Kavita Rao", soldKit.getBuyerParentName());
+        assertEquals("UPI_QR", soldKit.getPaymentMode());
+        assertNotNull(soldKit.getSoldAt());
+
+        // 3. Selling already sold kit must throw IllegalStateException
+        assertThrows(IllegalStateException.class, () -> admissionDeskService.sellProspectusKit(sellReq));
+
+        // 4. Verify inventory summary metrics
+        var summary = admissionDeskService.getProspectusInventorySummary();
+        assertNotNull(summary);
+        assertTrue(summary.getTotalKits() >= 4);
+        assertTrue(summary.getTotalSold() >= 1);
+        assertTrue(summary.getTotalRevenueCollected().compareTo(new BigDecimal("1500.00")) >= 0);
+    }
+
+    @Test
+    void testDocumentDeficiencyUndertakingAndOverdueSentinel() {
+        var officerId = java.util.UUID.randomUUID();
+        var appId = java.util.UUID.randomUUID();
+
+        // 1. Issue undertaking for missing Transfer Certificate with 15-day deadline
+        var issueReq = com.schoolerp.modules.admissions.dto.IssueUndertakingRequest.builder()
+                .applicationId(appId)
+                .studentName("Aarav Deshmukh")
+                .parentName("Vikram Deshmukh")
+                .missingDocumentName("Previous School TC with DEO Counter-Signature")
+                .reasonCode("PENDING_PREVIOUS_SCHOOL_CLEARANCE")
+                .deadlineDate(java.time.LocalDate.now().plusDays(15))
+                .verifiedByOfficerId(officerId)
+                .parentSignatureAck(true)
+                .build();
+        var undertaking = admissionDeskService.issueUndertaking(issueReq);
+        assertNotNull(undertaking);
+        assertTrue(undertaking.getUndertakingNumber().startsWith("UNDERTAKING-2026-"));
+        assertEquals("PENDING", undertaking.getStatus());
+        assertFalse(undertaking.getIsOverdue());
+
+        // 2. Fulfill undertaking when original certificate arrives
+        var fulfillReq = com.schoolerp.modules.admissions.dto.FulfillUndertakingRequest.builder()
+                .fulfillmentDate(java.time.LocalDate.now())
+                .remarks("DEO counter-signed TC received in physical custody")
+                .build();
+        var fulfilled = admissionDeskService.fulfillUndertaking(undertaking.getId(), fulfillReq);
+        assertNotNull(fulfilled);
+        assertEquals("FULFILLED", fulfilled.getStatus());
+        assertEquals(java.time.LocalDate.now(), fulfilled.getFulfillmentDate());
+
+        // 3. Issue second undertaking with past deadline to verify overdue sentinel
+        var pastIssueReq = com.schoolerp.modules.admissions.dto.IssueUndertakingRequest.builder()
+                .applicationId(java.util.UUID.randomUUID())
+                .studentName("Meera Kapoor")
+                .parentName("Sanjay Kapoor")
+                .missingDocumentName("Interstate Migration Certificate")
+                .reasonCode("INTERSTATE_TRANSFER_PROCESSING")
+                .deadlineDate(java.time.LocalDate.now().minusDays(5))
+                .verifiedByOfficerId(officerId)
+                .parentSignatureAck(true)
+                .build();
+        var overdueUndertaking = admissionDeskService.issueUndertaking(pastIssueReq);
+        assertNotNull(overdueUndertaking);
+
+        // Check overdue sentinel list
+        var sentinels = admissionDeskService.getOverdueSentinels();
+        assertNotNull(sentinels);
+        assertTrue(sentinels.stream().anyMatch(s -> s.getUndertakingNumber().equals(overdueUndertaking.getUndertakingNumber()) && s.getIsOverdue()));
+    }
+
+    @Test
+    void testIdentityMintingWelcomeDossierAndSeatSurrenderRefund() {
+        var studentId = java.util.UUID.randomUUID();
+        var officerId = java.util.UUID.randomUUID();
+
+        // 1. Mint permanent student admission identity
+        var mintReq = com.schoolerp.modules.admissions.dto.MintIdentityRequest.builder()
+                .studentId(studentId)
+                .studentName("Rohan Mehta")
+                .gradeName("Class 6")
+                .sectionName("A")
+                .rollNumber("24")
+                .houseName("Tigers")
+                .canteenInitialBalance(new BigDecimal("1000.00"))
+                .mintedByUserId(officerId)
+                .build();
+        var dossier = admissionDeskService.mintStudentIdentity(mintReq);
+        assertNotNull(dossier);
+        assertTrue(dossier.getAdmissionNumber().startsWith("ADM-2026-"));
+        assertEquals("Rohan Mehta", dossier.getStudentName());
+        assertEquals("Tigers", dossier.getHouseName());
+        assertTrue(dossier.getWelcomePackGenerated());
+        assertNotNull(dossier.getAdmissionLetterNumber());
+        assertNotNull(dossier.getTemporaryIdBadgeSlip());
+        assertNotNull(dossier.getBusPassClearanceToken());
+        assertNotNull(dossier.getUniformBookstoreVoucher());
+
+        // 2. Fetch welcome dossier by student ID
+        var fetched = admissionDeskService.getWelcomeDossierByStudentId(studentId);
+        assertNotNull(fetched);
+        assertEquals(dossier.getAdmissionNumber(), fetched.getAdmissionNumber());
+
+        // 3. Serialize Smart Card with new RFID UID and add balance
+        var cardReq = com.schoolerp.modules.admissions.dto.SerializeSmartCardRequest.builder()
+                .smartCardRfidUid("RFID-NFC-998822")
+                .addBalance(new BigDecimal("500.00"))
+                .build();
+        var cardSerialized = admissionDeskService.serializeSmartCard(studentId, cardReq);
+        assertNotNull(cardSerialized);
+        assertEquals("RFID-NFC-998822", cardSerialized.getSmartCardRfidUid());
+        assertEquals(new BigDecimal("1500.00"), cardSerialized.getCanteenInitialBalance());
+
+        // 4. Calculate Seat Surrender statutory refund (40 days prior to session start = 5% administrative retention)
+        var calcReq = com.schoolerp.modules.admissions.dto.CalculateSurrenderRefundRequest.builder()
+                .surrenderDate(java.time.LocalDate.now())
+                .academicSessionStartDate(java.time.LocalDate.now().plusDays(40))
+                .totalFeesPaid(new BigDecimal("100000.00"))
+                .build();
+        var calc = admissionDeskService.calculateSurrenderRefund(calcReq);
+        assertNotNull(calc);
+        assertEquals(new BigDecimal("5.00"), calc.getDeductionPercentage());
+        assertEquals(new BigDecimal("5000.00"), calc.getDeductionAmount());
+        assertEquals(new BigDecimal("95000.00"), calc.getRefundableAmount());
+
+        // 5. Process Seat Surrender and promote waitlist candidate
+        var promotedStudentId = java.util.UUID.randomUUID();
+        var surrenderReq = com.schoolerp.modules.admissions.dto.ProcessSeatSurrenderRequest.builder()
+                .applicationId(java.util.UUID.randomUUID())
+                .studentName("Rohan Mehta")
+                .gradeName("Class 6")
+                .categoryName("GENERAL")
+                .surrenderReason("Relocation to Bangalore due to parental job transfer")
+                .surrenderDate(java.time.LocalDate.now())
+                .totalFeesPaid(new BigDecimal("100000.00"))
+                .deductionPercentage(calc.getDeductionPercentage())
+                .waitlistStudentPromotedId(promotedStudentId)
+                .authorizedByUserId(officerId)
+                .build();
+        var surrenderResult = admissionDeskService.processSeatSurrender(surrenderReq);
+        assertNotNull(surrenderResult);
+        assertTrue(surrenderResult.getSurrenderRefNumber().startsWith("SURR-2026-"));
+        assertEquals("APPROVED", surrenderResult.getSettlementStatus());
+        assertEquals(new BigDecimal("95000.00"), surrenderResult.getRefundableAmount());
+        assertEquals(promotedStudentId, surrenderResult.getWaitlistStudentPromotedId());
+        assertNotNull(surrenderResult.getGeneralLedgerVoucherId());
+
+        // 6. Verify audit ledger
+        var ledger = admissionDeskService.getSurrenderAuditLedger();
+        assertNotNull(ledger);
+        assertTrue(ledger.stream().anyMatch(s -> s.getSurrenderRefNumber().equals(surrenderResult.getSurrenderRefNumber())));
     }
 }
 
