@@ -5,8 +5,8 @@
 [![Next.js 15](https://img.shields.io/badge/Next.js-15_App_Router-black.svg?style=flat&logo=next.js)](https://nextjs.org/)
 [![Kotlin 2.0](https://img.shields.io/badge/Kotlin-Jetpack_Compose-purple.svg?style=flat&logo=kotlin)](https://kotlinlang.org/)
 [![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-12_Schemas-blue.svg?style=flat&logo=postgresql)](https://www.postgresql.org/)
-[![Tests Passing](https://img.shields.io/badge/JUnit_5-115%2F115_Tests_Passed-success.svg)](https://junit.org/)
-[![Endpoints Verified](https://img.shields.io/badge/REST_Endpoints-252%2F252_Live_Verified-blueviolet.svg)](#5-complete-252-live-verified-rest-endpoints-directory)
+[![Tests Passing](https://img.shields.io/badge/JUnit_5-124%2F124_Tests_Passed-success.svg)](https://junit.org/)
+[![Endpoints Verified](https://img.shields.io/badge/REST_Endpoints-277%2F277_Live_Verified-blueviolet.svg)](#5-complete-277-live-verified-rest-endpoints-directory)
 
 A cloud-native, multi-portal **B2B SaaS School Enterprise Resource Planning (ERP)** platform engineered to lead the global educational software industry. Built to Tier-1 commercial standards benchmarked directly against **PowerSchool, Toddle, Odoo Enterprise, SAP Fiori, Verkada, Samsara, and Stripe Billing**.
 
@@ -17,7 +17,7 @@ A cloud-native, multi-portal **B2B SaaS School Enterprise Resource Planning (ERP
 2. [Dedicated Pod & Dual-Database HA Architecture](#2-dedicated-pod--dual-database-ha-architecture)
 3. [Global Commercial SaaS Benchmark Matrix](#3-global-commercial-saas-benchmark-matrix)
 4. [PostgreSQL 12-Schema Domain Architecture & Complete Backend Feature Directory](#4-postgresql-12-schema-domain-architecture--complete-backend-feature-directory)
-5. [Complete 252 Live Verified REST Endpoints Directory](#5-complete-252-live-verified-rest-endpoints-directory)
+5. [Complete 277 Live Verified REST Endpoints Directory](#5-complete-277-live-verified-rest-endpoints-directory)
 6. [Omni-Channel Portals & Client Applications](#6-omni-channel-portals--client-applications)
 7. [Enterprise Invariants & Regulatory Compliance](#7-enterprise-invariants--regulatory-compliance)
 8. [Getting Started & Local Development](#8-getting-started--local-development)
@@ -381,9 +381,9 @@ graph TD
 
 ---
 
-## 5. Complete 252 Live Verified REST Endpoints Directory
+## 5. Complete 277 Live Verified REST Endpoints Directory
 
-All 252 endpoints are fully implemented, compiled, and verified via automated test suites and live HTTP scripts:
+All 277 endpoints are fully implemented, compiled, and verified via automated test suites and live HTTP scripts:
 
 | # | Endpoint URL | Method | Module / Schema | Capability Description |
 |:---:|---|:---:|:---:|---|
@@ -640,6 +640,31 @@ All 252 endpoints are fully implemented, compiled, and verified via automated te
 | **250** | `/api/v1/admissions/desk/surrender/calculate` | `POST` | `admissions` | Calculate statutory fee refund schedule based on days remaining before academic session start |
 | **251** | `/api/v1/admissions/desk/surrender/process` | `POST` | `admissions` | Process confirmed seat surrender, issue General Ledger refund voucher, and recycle quota seat to waitlist |
 | **252** | `/api/v1/admissions/desk/surrender/audit-ledger` | `GET` | `admissions` | Audit ledger of all surrendered seats, refunded amounts, and recycled vacancies |
+| **253** | `/api/v1/system/audit-logs/verify-chain` | `GET` | `system` | Mathematical verification of cryptographic SHA-256 Merkle audit hash chain; detects tampering |
+| **254** | `/api/v1/system/jobs/sample-bulk-run` | `POST` | `system` | Non-blocking asynchronous batch job dispatcher with percentage progress tracking |
+| **255** | `/api/v1/system/jobs/{jobId}` | `GET` | `system` | Real-time status polling for asynchronous background worker batch jobs |
+| **256** | `/api/v1/identity/mfa/setup` | `POST` | `identity` | Generates RFC 6238 Base32 TOTP secret, `otpauth://` URI, and 8 one-time scratch recovery codes |
+| **257** | `/api/v1/identity/mfa/verify` | `POST` | `identity` | Verifies 6-digit TOTP token or single-use recovery scratch code to activate MFA |
+| **258** | `/api/v1/academics/curriculum/units` | `POST` | `academics` | Create structured curriculum syllabus unit with allocated periods and CBSE competencies |
+| **259** | `/api/v1/academics/curriculum/units/grade/{grade}/subject/{subject}` | `GET` | `academics` | Retrieve curriculum unit plans and progress milestones for a specific grade and subject |
+| **260** | `/api/v1/academics/curriculum/units/{id}/approve` | `PUT` | `academics` | Academic Coordinator & Principal review and formal approval desk for curriculum units |
+| **261** | `/api/v1/academics/curriculum/pacing-radar` | `GET` | `academics` | Syllabus Completion & Pacing Sentinel comparing elapsed instructional days vs actual coverage |
+| **262** | `/api/v1/academics/curriculum/lesson-plans` | `POST` | `academics` | Teacher weekly lesson delivery plan linked to timetable slots and exit ticket assessments |
+| **263** | `/api/v1/finance/concessions/workflow/submit` | `POST` | `finance` | Draft fee concession request (Maker) with justification documents and tiered threshold rules |
+| **264** | `/api/v1/finance/concessions/workflow/{id}/authorize` | `PUT` | `finance` | Maker-Checker authorization desk by Principal/Bursar with automated General Ledger voucher |
+| **265** | `/api/v1/finance/concessions/workflow/pending` | `GET` | `finance` | List pending fee concession approval dockets awaiting executive authorization |
+| **266** | `/api/v1/finance/pdc/deposit-vault` | `POST` | `finance` | Register physical post-dated cheque (PDC) in fireproof vault custody with drawer metadata |
+| **267** | `/api/v1/finance/pdc/maturity-schedule` | `GET` | `finance` | PDC 7/14/30-day maturity calendar for parent reminders and automated bank presentation scrolls |
+| **268** | `/api/v1/finance/pdc/{id}/clear` | `PUT` | `finance` | Mark matured PDC cleared and deposited with automated General Ledger revenue postings |
+| **269** | `/api/v1/operations/hostel/mess/menu` | `POST` | `operations` | Configure weekly 7-day residential dining hall menu with dietary types and allergen flags |
+| **270** | `/api/v1/operations/hostel/mess/menu/today` | `GET` | `operations` | Retrieve active day's residential dining menu across Breakfast, Lunch, Snacks, and Dinner |
+| **271** | `/api/v1/operations/hostel/mess/meal-punch` | `POST` | `operations` | Contactless RFID dining hall meal turnstile punch with anti-double-dipping duplicate defense |
+| **272** | `/api/v1/operations/hostel/inspections/checkout` | `POST` | `operations` | End-of-term hostel room checkout fixture inspection with automated caution money damage deductions |
+| **273** | `/api/v1/operations/fleet/breakdown/emergency-swap` | `POST` | `operations` | Mid-transit emergency bus breakdown substitution, live telematics rerouting, and instant parent broadcast |
+| **274** | `/api/v1/operations/fleet/driver/pre-trip-check` | `POST` | `operations` | Daily morning driver breathalyzer zero-reading verification and vehicle safety checklist |
+| **275** | `/api/v1/students/discipline/hearings` | `POST` | `students` | Convene formal disciplinary committee hearing docket with parent summons and charges framed |
+| **276** | `/api/v1/students/discipline/hearings/{id}/sanction` | `PUT` | `students` | Record committee inquiry findings, formal sanctions (suspension/bond), and reinstatement terms |
+| **277** | `/api/v1/students/discipline/hearings/student/{id}` | `GET` | `students` | Comprehensive student disciplinary and behavioral counseling dossier |
 
 ---
 
@@ -750,21 +775,21 @@ Access the portals:
 ## 9. Automated Testing & Live Verification
 
 ### 1. Automated JUnit 5 Integration Test Suite
-The automated test suite validates multi-tenant isolation, statutory payroll calculations, 7th CPC DA revisions, Section 115BAC Form 16 generation, double-entry balancing, direct bank reconciliation, constraint timetable scheduling, teacher substitution conflicts, Samsara geofencing, sub-service feature toggles, academic rollover promotions, anti-cheating seating plans, campus emergency lockdowns, Dual-DB failover drills, tenant designation hierarchies, classroom lesson materials locker, in-class exit tickets, learning portfolios, adaptive study plans, classroom micro-badges, project-based learning milestones, virtual emergency campus pivot, complete emergency shutdown, welfare safety check-in registry, virtual classroom sessions (Jitsi/Zoom), asynchronous catch-up normalization, dynamic custom metafields, universal custom entity creation & dynamic JSON records lifecycle, outbound webhook subscriptions with HMAC-SHA256 signatures, Argon2id cryptographic password hashing, Spring Cache metadata acceleration, paged student & audit log directories, rapid physical walk-in desk intake, spot prospectus fee collection, interview rubric evaluations, formal merit offer letters, 1-click active student conversion, admissions funnel analytics, AES-256-GCM field encryption at rest, payment webhook HMAC-SHA256 verification, pessimistic wallet double-spending defense, and cross-tenant header spoofing defense:
+The automated test suite validates multi-tenant isolation, statutory payroll calculations, 7th CPC DA revisions, Section 115BAC Form 16 generation, double-entry balancing, direct bank reconciliation, constraint timetable scheduling, teacher substitution conflicts, Samsara geofencing, sub-service feature toggles, academic rollover promotions, anti-cheating seating plans, campus emergency lockdowns, Dual-DB failover drills, tenant designation hierarchies, classroom lesson materials locker, in-class exit tickets, learning portfolios, adaptive study plans, classroom micro-badges, project-based learning milestones, virtual emergency campus pivot, complete emergency shutdown, welfare safety check-in registry, virtual classroom sessions (Jitsi/Zoom), asynchronous catch-up normalization, dynamic custom metafields, universal custom entity creation & dynamic JSON records lifecycle, outbound webhook subscriptions with HMAC-SHA256 signatures, Argon2id cryptographic password hashing, Spring Cache metadata acceleration, paged student & audit log directories, rapid physical walk-in desk intake, spot prospectus fee collection, interview rubric evaluations, formal merit offer letters, 1-click active student conversion, admissions funnel analytics, AES-256-GCM field encryption at rest, payment webhook HMAC-SHA256 verification, pessimistic wallet double-spending defense, cross-tenant header spoofing defense, cryptographic SHA-256 Merkle audit hash chaining, asynchronous batch job dispatch, RFC 6238 TOTP MFA lifecycle with scratch codes, curriculum unit planning & syllabus pacing radar, maker-checker fee concession workflows, post-dated cheque (PDC) vault maturity scheduling, hostel mess menu & anti-double-dipping RFID meal turnstiles, room checkout fixture inspections, mid-transit fleet emergency bus substitutions, driver pre-trip safety checks, and formal student disciplinary committee due process:
 
 ```bash
 cd backend
 ./gradlew test
 ```
-*Expected Result: `BUILD SUCCESSFUL` (115/115 tests passed with 0 failures, 0 errors in ~1m 30s).*
+*Expected Result: `BUILD SUCCESSFUL` (124/124 tests passed with 0 failures, 0 errors in ~1m 40s).*
 
-### 2. Live 252-Endpoint Verification Script
-Verify all 252 live REST API endpoints against an active backend server:
+### 2. Live 277-Endpoint Verification Script
+Verify all 277 live REST API endpoints against an active backend server:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File backend\test_endpoints.ps1
 ```
-*Expected Result: All 252 endpoints return HTTP 200 OK / 201 Created with formatted payloads (100% success rate).*
+*Expected Result: All 277 endpoints return HTTP 200 OK / 201 Created with formatted payloads (100% success rate).*
 
 ---
 

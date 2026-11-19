@@ -303,6 +303,36 @@ class SchoolErpApplicationTests {
     @Autowired
     private com.schoolerp.common.security.AesGcmAttributeEncryptor aesEncryptor;
 
+    @Autowired
+    private com.schoolerp.modules.system.service.AuditHashChainService auditHashChainService;
+
+    @Autowired
+    private com.schoolerp.modules.system.service.BatchJobService batchJobService;
+
+    @Autowired
+    private com.schoolerp.common.security.TotpService totpService;
+
+    @Autowired
+    private com.schoolerp.modules.identity.service.MfaService mfaService;
+
+    @Autowired
+    private com.schoolerp.modules.academics.service.CurriculumPlanningService curriculumPlanningService;
+
+    @Autowired
+    private com.schoolerp.modules.finance.service.ConcessionWorkflowService concessionWorkflowService;
+
+    @Autowired
+    private com.schoolerp.modules.finance.service.PdcVaultService pdcVaultService;
+
+    @Autowired
+    private com.schoolerp.modules.operations.service.HostelMessService hostelMessService;
+
+    @Autowired
+    private com.schoolerp.modules.operations.service.FleetEmergencyService fleetEmergencyService;
+
+    @Autowired
+    private com.schoolerp.modules.students.service.DisciplinaryHearingService disciplinaryHearingService;
+
     @BeforeEach
     void setUp() {
         TenantContext.setTenantId("tenant_apex_mumbai_01");
@@ -4167,6 +4197,225 @@ class SchoolErpApplicationTests {
         // Legacy unencrypted string fallback check
         String legacyPlain = "LEGACY-PLAIN-DATA";
         assertEquals(legacyPlain, aesEncryptor.convertToEntityAttribute(legacyPlain));
+    }
+
+    @Test
+    void testCryptographicAuditHashChainIntegrity() {
+        // 1. Log sequential actions into cryptographic hash chain
+        var b1 = auditHashChainService.logHashedAction("STUDENT_ENROLLED", "admin@apex.edu.in", "Student", "STD-101", "{\"name\":\"Kiran Sharma\"}");
+        assertNotNull(b1);
+        assertEquals(0L, b1.getChainIndex());
+        assertEquals(com.schoolerp.modules.system.service.AuditHashChainService.GENESIS_PREV_HASH, b1.getPreviousHash());
+        assertNotNull(b1.getCurrentHash());
+
+        var b2 = auditHashChainService.logHashedAction("FEE_PAID", "cashier@apex.edu.in", "FeeInvoice", "INV-2026-901", "{\"amount\":15000.00}");
+        assertNotNull(b2);
+        assertEquals(1L, b2.getChainIndex());
+        assertEquals(b1.getCurrentHash(), b2.getPreviousHash(), "Block 1 must chain directly to Block 0 hash");
+
+        // 2. Verify chain mathematical integrity
+        var verification = auditHashChainService.verifyChainIntegrity();
+        assertNotNull(verification);
+        assertTrue(verification.isValid(), "Cryptographic audit chain must verify 100% valid");
+        assertTrue(verification.getTotalBlocksVerified() >= 2);
+    }
+
+    @Test
+    void testBatchJobAsynchronousSubmissionAndStatus() {
+        var job = batchJobService.runSimulatedBulkJob("REPORT_CARD_PDF_RENDER", 350, "principal@apex.edu.in");
+        assertNotNull(job);
+        assertNotNull(job.getJobId());
+        assertTrue(job.getJobId().startsWith("JOB-2026-"));
+        assertEquals("COMPLETED", job.getStatus());
+        assertEquals(350, job.getTotalItems());
+        assertEquals(350, job.getProcessedItems());
+        assertEquals(100.0, job.getProgressPercentage());
+    }
+
+    @Test
+    void testRfc6238TotpMfaLifecycleAndScratchRecovery() {
+        String testEmail = "admin@apexacademy.edu.in";
+
+        // 1. Setup MFA
+        var setup = mfaService.setupMfa(testEmail);
+        assertNotNull(setup);
+        assertNotNull(setup.getSecretKey());
+        assertTrue(setup.getSecretKey().length() >= 16);
+        assertNotNull(setup.getOtpAuthUri());
+        assertTrue(setup.getOtpAuthUri().startsWith("otpauth://totp/"));
+        assertEquals(8, setup.getRecoveryScratchCodes().size());
+
+        // 2. Verify with valid 6-digit TOTP
+        String currentTotp = totpService.generateCurrentTotp(setup.getSecretKey());
+        var verifyRes = mfaService.verifyMfa(testEmail, currentTotp);
+        assertNotNull(verifyRes);
+        assertTrue(verifyRes.isSuccess());
+        assertFalse(verifyRes.isRecoveryCodeUsed());
+
+        // 3. Verify with one-time scratch recovery code
+        String scratchCode = setup.getRecoveryScratchCodes().get(0);
+        var scratchRes = mfaService.verifyMfa(testEmail, scratchCode);
+        assertNotNull(scratchRes);
+        assertTrue(scratchRes.isSuccess());
+        assertTrue(scratchRes.isRecoveryCodeUsed(), "Scratch recovery code must be recognized and consumed");
+    }
+
+    @Test
+    void testCurriculumUnitAndPacingRadar() {
+        var unitReq = new com.schoolerp.modules.academics.dto.CurriculumPlanningDTOs.CreateUnitRequest(
+                "10", "Mathematics", "Trigonometric Identities & Heights", 16,
+                "Master sine/cosine angle proofs", "CBSE Competency 10.4", "Term 2"
+        );
+
+        var unit = curriculumPlanningService.createUnit(unitReq, "Teacher Vandana");
+        assertNotNull(unit);
+        assertNotNull(unit.getUnitCode());
+        assertEquals("SUBMITTED_FOR_REVIEW", unit.getStatus());
+
+        // Approve unit
+        var appReq = new com.schoolerp.modules.academics.dto.CurriculumPlanningDTOs.ApproveUnitRequest("APPROVED", "Pedagogy verified by Academic Head");
+        var approved = curriculumPlanningService.approveUnit(unit.getId(), appReq, "Principal Sharma");
+        assertEquals("APPROVED", approved.getStatus());
+
+        // Pacing radar
+        var radar = curriculumPlanningService.getPacingRadar("10", "Mathematics");
+        assertNotNull(radar);
+        assertTrue(radar.getTotalUnits() > 0);
+        assertNotNull(radar.getPacingStatus());
+
+        // Weekly lesson plan
+        var planReq = new com.schoolerp.modules.academics.dto.CurriculumPlanningDTOs.SubmitLessonPlanRequest(
+                unit.getId(), "10", "Mathematics", 1,
+                "Derivation of sin^2(theta) + cos^2(theta) = 1 with circle geometric diagrams",
+                "Flipped classroom with Geogebra animations", "In-class exit ticket"
+        );
+        var plan = curriculumPlanningService.submitLessonPlan(planReq, "Teacher Vandana");
+        assertNotNull(plan);
+        assertEquals("SUBMITTED", plan.getStatus());
+    }
+
+    @Test
+    void testConcessionMakerCheckerEnforcement() {
+        var submitReq = new com.schoolerp.modules.finance.dto.FinanceGovernanceDTOs.SubmitConcessionRequest(
+                java.util.UUID.randomUUID(), "Rohan Verma", "2026-2027", "FINANCIAL_HARDSHIP",
+                new BigDecimal("15000.00"), "Father job loss; certified income declaration submitted"
+        );
+
+        var docket = concessionWorkflowService.submitConcession(submitReq, "accountant_user");
+        assertNotNull(docket);
+        assertEquals("PENDING_CHECKER_REVIEW", docket.getStatus());
+        assertEquals("BURSAR", docket.getRequiredCheckerRole());
+
+        // Maker cannot authorize their own docket (Maker-Checker defense)
+        var authReq = new com.schoolerp.modules.finance.dto.FinanceGovernanceDTOs.AuthorizeConcessionRequest(true, new BigDecimal("12000.00"), "Approved 80% waiver");
+        assertThrows(SecurityException.class, () ->
+                concessionWorkflowService.authorizeConcession(docket.getId(), authReq, "accountant_user")
+        );
+
+        // Legitimate Checker authorization
+        var approvedDocket = concessionWorkflowService.authorizeConcession(docket.getId(), authReq, "bursar_finance_head");
+        assertEquals("APPROVED", approvedDocket.getStatus());
+        assertEquals(new BigDecimal("12000.00"), approvedDocket.getApprovedAmount());
+        assertNotNull(approvedDocket.getGeneralLedgerVoucherId());
+    }
+
+    @Test
+    void testPdcVaultMaturityScheduleAndClearing() {
+        var depositReq = new com.schoolerp.modules.finance.dto.FinanceGovernanceDTOs.DepositPdcRequest(
+                java.util.UUID.randomUUID(), "Meera Joshi", "CHQ-990142", "ICICI Bank",
+                "Deepak Joshi", new BigDecimal("28000.00"), java.time.LocalDate.now().plusDays(10), "LOCKER-VAULT-C4"
+        );
+
+        var pdc = pdcVaultService.depositPdc(depositReq);
+        assertNotNull(pdc);
+        assertEquals("IN_VAULT", pdc.getStatus());
+
+        var schedule = pdcVaultService.getMaturitySchedule();
+        assertNotNull(schedule);
+        assertTrue(schedule.getTotalCheques() > 0);
+
+        var cleared = pdcVaultService.clearPdc(pdc.getId());
+        assertEquals("CLEARED", cleared.getStatus());
+        assertNotNull(cleared.getClearedAt());
+    }
+
+    @Test
+    void testHostelMessMenuAndDuplicateMealSwipeDefense() {
+        var menuReq = new com.schoolerp.modules.operations.dto.HostelMessAndFleetDTOs.ConfigureMessMenuRequest(
+                "WEDNESDAY", "LUNCH", "Rajma Masala, Steamed Rice, Butter Roti, Boondi Raita, Salad",
+                "VEGETARIAN", "Dairy, Gluten", "High protein meal"
+        );
+        var menu = hostelMessService.configureMenu(menuReq);
+        assertNotNull(menu);
+
+        var todayOverview = hostelMessService.getTodayMenu();
+        assertNotNull(todayOverview);
+        assertFalse(todayOverview.getMeals().isEmpty());
+
+        java.util.UUID studentId = java.util.UUID.randomUUID();
+        var punchReq = new com.schoolerp.modules.operations.dto.HostelMessAndFleetDTOs.MealPunchRequest(
+                studentId, "Kabir Mehta", "RFID-CAB-891", "LUNCH", "DINING-HALL-WEST"
+        );
+
+        // 1st swipe: accepted
+        var firstSwipe = hostelMessService.recordMealPunch(punchReq);
+        assertTrue(firstSwipe.isAccepted(), "First meal swipe must be accepted");
+
+        // 2nd swipe: blocked by anti-double-dipping defense
+        var duplicateSwipe = hostelMessService.recordMealPunch(punchReq);
+        assertFalse(duplicateSwipe.isAccepted(), "Duplicate swipe for same meal window must be rejected");
+        assertTrue(duplicateSwipe.getMessage().contains("Duplicate swipe detected"));
+    }
+
+    @Test
+    void testFleetEmergencyBusSwapAndDriverPreTripCheck() {
+        var swapReq = new com.schoolerp.modules.operations.dto.HostelMessAndFleetDTOs.EmergencyBusSwapRequest(
+                "KA-01-AB-1204", "KA-01-XY-9081", "Mohan Lal", "+91 98765 43210",
+                "ROUTE-14-WHITEFIELD", "Flat tire on outer ring road", 34
+        );
+
+        var swap = fleetEmergencyService.triggerEmergencyBusSwap(swapReq);
+        assertNotNull(swap);
+        assertEquals("ACTIVE_SUBSTITUTION", swap.getStatus());
+        assertTrue(swap.isParentBroadcastDispatched());
+
+        var checkReq = new com.schoolerp.modules.operations.dto.HostelMessAndFleetDTOs.DriverPreTripCheckRequest(
+                "DRV-201", "Mohan Lal", "KA-01-XY-9081", BigDecimal.ZERO,
+                true, true, true, true, true, "Supervisor Rajesh Verified"
+        );
+        var check = fleetEmergencyService.recordDriverPreTripCheck(checkReq);
+        assertNotNull(check);
+        assertTrue(check.isTripCleared());
+    }
+
+    @Test
+    void testStudentDisciplinaryDueProcessAndSanctions() {
+        java.util.UUID studentId = java.util.UUID.randomUUID();
+        var hearingReq = new com.schoolerp.modules.students.dto.DisciplinaryDTOs.ConveneHearingRequest(
+                studentId, "Samir Khan", "11", java.time.LocalDate.now().minusDays(1),
+                "VANDALISM", "Intentional damage to computer lab keyboard and monitor",
+                java.time.LocalDate.now().plusDays(2), "Vice Principal, IT HOD, Counselor"
+        );
+
+        var hearing = disciplinaryHearingService.conveneHearing(hearingReq);
+        assertNotNull(hearing);
+        assertTrue(hearing.getDocketNumber().startsWith("DISC-2026-"));
+        assertEquals("SCHEDULED", hearing.getStatus());
+
+        var sanctionReq = new com.schoolerp.modules.students.dto.DisciplinaryDTOs.RecordSanctionRequest(
+                "Student acknowledged infraction during hearing; IT equipment damage assessed",
+                "IN_SCHOOL_SUSPENSION", 2, java.time.LocalDate.now(), java.time.LocalDate.now().plusDays(2),
+                "Assigned to library archive duty during laboratory periods", "Replacement cost reimbursed by parent"
+        );
+
+        var sanction = disciplinaryHearingService.recordSanction(hearing.getId(), sanctionReq, "Principal Sharma");
+        assertNotNull(sanction);
+        assertEquals("IN_SCHOOL_SUSPENSION", sanction.getSanctionType());
+
+        var history = disciplinaryHearingService.getStudentDisciplinaryHistory(studentId);
+        assertNotNull(history);
+        assertEquals(1, history.getTotalHearings());
+        assertEquals(1, history.getActiveSanctions());
     }
 }
 

@@ -68,7 +68,7 @@ public class SecurityConfig {
                         // Mobile Parent/Student API requires valid authentication
                         .requestMatchers("/api/v1/mobile/**").authenticated()
                         // Protected endpoints with role checking aligned with method-level security
-                        .requestMatchers("/api/v1/system/**").hasAnyRole("SUPER_ADMIN", "ADMIN", "PRINCIPAL", "TEACHER", "STAFF")
+                        .requestMatchers("/api/v1/system/**").hasAnyRole("SUPER_ADMIN", "ADMIN", "PRINCIPAL", "TEACHER", "STAFF", "ACCOUNTANT")
                         .requestMatchers("/api/v1/communication/**").hasAnyRole("SUPER_ADMIN", "ADMIN", "TEACHER", "PRINCIPAL", "STAFF", "PARENT", "STUDENT")
                         .requestMatchers("/api/v1/finance/**").hasAnyRole("SUPER_ADMIN", "ADMIN", "PRINCIPAL", "ACCOUNTANT", "FRONT_DESK", "ADMISSION_OFFICER")
                         .requestMatchers("/api/v1/attendance/**").hasAnyRole("SUPER_ADMIN", "ADMIN", "TEACHER", "PRINCIPAL", "STAFF")

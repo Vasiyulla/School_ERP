@@ -1,7 +1,9 @@
 package com.schoolerp.modules.system.controller;
 
 import com.schoolerp.common.response.ApiResponse;
+import com.schoolerp.modules.system.dto.AuditHashChainVerificationDTO;
 import com.schoolerp.modules.system.entity.AuditLog;
+import com.schoolerp.modules.system.service.AuditHashChainService;
 import com.schoolerp.modules.system.service.AuditLogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -20,6 +22,7 @@ import java.util.List;
 public class AuditLogController {
 
     private final AuditLogService auditLogService;
+    private final AuditHashChainService auditHashChainService;
 
     @GetMapping
     @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('PRINCIPAL')")
@@ -36,5 +39,13 @@ public class AuditLogController {
         Page<AuditLog> paged = auditLogService.getPagedLogs(page, size);
         return ResponseEntity.ok(ApiResponse.ok(paged));
     }
+
+    @GetMapping("/verify-chain")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('PRINCIPAL')")
+    public ResponseEntity<ApiResponse<AuditHashChainVerificationDTO>> verifyAuditHashChain() {
+        AuditHashChainVerificationDTO result = auditHashChainService.verifyChainIntegrity();
+        return ResponseEntity.ok(ApiResponse.ok("Cryptographic audit hash chain verified", result));
+    }
 }
+
 
